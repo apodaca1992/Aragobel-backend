@@ -14,7 +14,9 @@ const Tienda = sequelize.define('Tienda', {
     latitud: DataTypes.STRING(50),
     longitud: DataTypes.STRING(50)
 }, {
-    tableName: 'tiendas' // Nombre exacto de tu tabla en MariaDB
+    tableName: 'tiendas', // Nombre exacto de tu tabla en MariaDB
+    timestamps: true, // Para que busque createdAt/updatedAt,
+    paranoid: true // <--- ESTO ACTIVA EL BORRADO LÓGICO
 });
 
 module.exports = Tienda;

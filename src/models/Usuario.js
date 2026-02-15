@@ -35,7 +35,8 @@ const Usuario = sequelize.define('Usuario', {
     }
 }, {
     tableName: 'usuarios',
-    timestamps: false // Para que no busque createdAt/updatedAt
+    timestamps: true, // Para que busque createdAt/updatedAt,
+    paranoid: true // <--- ESTO ACTIVA EL BORRADO LÓGICO
 });
 
 // Definir la relación (Asociación)
