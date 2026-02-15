@@ -1,0 +1,53 @@
+const Usuario = require('./Usuario');
+const Empleado = require('./Empleado');
+const Rol = require('./Rol');
+const Aplicacion = require('./Aplicacion');
+const Recurso = require('./Recurso');
+const Permiso = require('./Permiso');
+const Tienda = require('./Tienda');
+const Puesto = require('./Puesto');
+const UsuarioRol = require('./UsuarioRol');
+const RolRecursoPermiso = require('./RolRecursoPermiso');
+
+const setupAssociations = () => {
+    // 1. Relación: Empleado <-> Tienda y Puesto
+    Tienda.hasMany(Empleado, { foreignKey: 'id_tienda' });
+    Empleado.belongsTo(Tienda, { foreignKey: 'id_tienda' });
+
+    Puesto.hasMany(Empleado, { foreignKey: 'id_puesto' });
+    Empleado.belongsTo(Puesto, { foreignKey: 'id_puesto' });
+
+    // 2. Relación: Usuario <-> Empleado (1:1)
+    Empleado.hasOne(Usuario, { foreignKey: 'id_empleado' });
+    Usuario.belongsTo(Empleado, { foreignKey: 'id_empleado' });
+
+    // 3. Relación: Usuario <-> Roles (N:M)
+    Usuario.belongsToMany(Rol, { 
+        through: UsuarioRol, 
+        foreignKey: 'id_usuario', 
+        otherKey: 'id_rol' 
+    });
+    Rol.belongsToMany(Usuario, { 
+        through: UsuarioRol, 
+        foreignKey: 'id_rol', 
+        otherKey: 'id_usuario' 
+    });
+
+    // 4. Relación: Aplicación <-> Recurso (1:N)
+    Aplicacion.hasMany(Recurso, { foreignKey: 'id_aplicacion' });
+    Recurso.belongsTo(Aplicacion, { foreignKey: 'id_aplicacion' });
+
+    // 5. Relación Ternaria: Roles <-> Recursos <-> Permisos (N:M:P)
+    // Nota: Usamos el modelo RolRecursoPermiso para unir las tres tablas
+    Rol.belongsToMany(Recurso, { through: RolRecursoPermiso, foreignKey: 'id_rol' });
+    Recurso.belongsToMany(Rol, { through: RolRecursoPermiso, foreignKey: 'id_recurso' });
+    
+    // Conectamos la tabla intermedia con Permisos para poder saber qué acción se permite
+    RolRecursoPermiso.belongsTo(Permiso, { foreignKey: 'id_permiso' });
+    Permiso.hasMany(RolRecursoPermiso, { foreignKey: 'id_permiso' });
+    
+    RolRecursoPermiso.belongsTo(Rol, { foreignKey: 'id_rol' });
+    RolRecursoPermiso.belongsTo(Recurso, { foreignKey: 'id_recurso' });
+};
+
+module.exports = setupAssociations;

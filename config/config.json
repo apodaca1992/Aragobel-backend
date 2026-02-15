@@ -1,0 +1,9 @@
+{
+  "development": {
+    "username": "adrian",
+    "password": "carro123",
+    "database": "aragobel",
+    "host": "localhost",
+    "dialect": "mariadb"
+  }
+}
