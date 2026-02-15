@@ -1,6 +1,7 @@
 # Dependencias
 node_modules/
 jspm_packages/
+package-lock.json
 
 # Configuración y Variables de Entorno (¡MUY IMPORTANTE!)
 .env
