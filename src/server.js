@@ -1,7 +1,7 @@
 require('dotenv').config();
 const app = require('./app');
 const sequelize = require('./config/db');
-const setupAssociations = require('./models/associations');
+const { setupAssociations } = require('./models/associations');
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,7 +12,7 @@ async function main() {
         console.log('✅ Conexión a MariaDB establecida correctamente (ORM).');
 
         // Configurar asociaciones en las tablas de la base de datos
-        setupAssociations();
+        await setupAssociations();
         // Luego sincronizar
         sequelize.sync({ alter: false }).then(() => {
             console.log('Tablas y asociaciones configuradas correctamente');

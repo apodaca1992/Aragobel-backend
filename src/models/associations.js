@@ -41,6 +41,14 @@ const setupAssociations = () => {
     // Nota: Usamos el modelo RolRecursoPermiso para unir las tres tablas
     Rol.belongsToMany(Recurso, { through: RolRecursoPermiso, foreignKey: 'id_rol' });
     Recurso.belongsToMany(Rol, { through: RolRecursoPermiso, foreignKey: 'id_recurso' });
+
+    // NUEVO: Puentes directos para que el "include" funcione desde el Recurso
+    Recurso.hasMany(RolRecursoPermiso, { foreignKey: 'id_recurso' });
+    RolRecursoPermiso.belongsTo(Recurso, { foreignKey: 'id_recurso' });
+
+    // (Opcional pero recomendado) Puente desde Rol
+    Rol.hasMany(RolRecursoPermiso, { foreignKey: 'id_rol' });
+    RolRecursoPermiso.belongsTo(Rol, { foreignKey: 'id_rol' });
     
     // Conectamos la tabla intermedia con Permisos para poder saber qué acción se permite
     RolRecursoPermiso.belongsTo(Permiso, { foreignKey: 'id_permiso' });
@@ -50,4 +58,16 @@ const setupAssociations = () => {
     RolRecursoPermiso.belongsTo(Recurso, { foreignKey: 'id_recurso' });
 };
 
-module.exports = setupAssociations;
+module.exports = { 
+    setupAssociations, 
+    Usuario, 
+    Empleado, 
+    Rol, 
+    Aplicacion, 
+    Recurso, 
+    Permiso, 
+    Tienda, 
+    Puesto, 
+    UsuarioRol, 
+    RolRecursoPermiso 
+};
