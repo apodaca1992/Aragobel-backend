@@ -4,6 +4,7 @@ const app = express();
 // Rutas (las crearemos en un momento)
 const authRoutes = require('./routes/authRoutes');
 const tiendaRoutes = require('./routes/tiendaRoutes');
+const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
 
 // Middlewares para entender JSON
 app.use(express.json());
@@ -16,5 +17,6 @@ app.get('/', (req, res) => {
 // Unir las rutas de las entidades
 app.use('/api/auth', authRoutes); // Prefijo para login, registro, etc.
 app.use('/api/tiendas', tiendaRoutes);
+app.use('/api/entregas', entregaFeatureRoutes);
 
 module.exports = app;

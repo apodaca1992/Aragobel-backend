@@ -66,11 +66,15 @@ const login = async (usuario, contrasena) => {
         });
     }
 
+    // Extraemos todos los nombres de los roles y los pasamos a Mayúsculas
+    const roles = usuarioConPermisos.Rols.map(r => r.nombre.toUpperCase());
+
     // 3. Generar Token
     const token = jwt.sign(
         { 
             id: user.id_usuario, 
             usuario: user.usuario,
+            roles: roles,
             permisos: permisosMap // <--- Se agregan aquí
         },
         process.env.JWT_SECRET,
@@ -78,7 +82,7 @@ const login = async (usuario, contrasena) => {
     );
 
     return { 
-        user: { id: user.id_usuario, usuario: user.usuario },
+        user: { id: user.id_usuario, usuario: user.usuario, roles },
         token,
         permisos: permisosMap // También los devolvemos para el Frontend
     };

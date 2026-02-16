@@ -22,7 +22,8 @@ module.exports = {//npx sequelize-cli db:seed --seed nombre_de_tu_archivo.js
       { id_permiso: 1, tipo_permiso: 'VER', createdAt: new Date(), updatedAt: new Date() },
       { id_permiso: 2, tipo_permiso: 'CREAR', createdAt: new Date(), updatedAt: new Date() },
       { id_permiso: 3, tipo_permiso: 'EDITAR', createdAt: new Date(), updatedAt: new Date() },
-      { id_permiso: 4, tipo_permiso: 'ELIMINAR', createdAt: new Date(), updatedAt: new Date() }
+      { id_permiso: 4, tipo_permiso: 'ELIMINAR', createdAt: new Date(), updatedAt: new Date() },
+      { id_permiso: 5, tipo_permiso: 'Listar', createdAt: new Date(), updatedAt: new Date() }
     ]);
 
     // 4. Crear Recursos: Entregas y Checador
@@ -47,12 +48,14 @@ module.exports = {//npx sequelize-cli db:seed --seed nombre_de_tu_archivo.js
       { id_rol: 1, id_recurso: 1, id_permiso: 2, createdAt: new Date(), updatedAt: new Date() },
       { id_rol: 1, id_recurso: 1, id_permiso: 3, createdAt: new Date(), updatedAt: new Date() },
       { id_rol: 1, id_recurso: 1, id_permiso: 4, createdAt: new Date(), updatedAt: new Date() },
+      { id_rol: 1, id_recurso: 1, id_permiso: 5, createdAt: new Date(), updatedAt: new Date() },
 
       // Permisos para el recurso CHECADOR (id_recurso: 2)
       { id_rol: 1, id_recurso: 2, id_permiso: 1, createdAt: new Date(), updatedAt: new Date() },
       { id_rol: 1, id_recurso: 2, id_permiso: 2, createdAt: new Date(), updatedAt: new Date() },
       { id_rol: 1, id_recurso: 2, id_permiso: 3, createdAt: new Date(), updatedAt: new Date() },
-      { id_rol: 1, id_recurso: 2, id_permiso: 4, createdAt: new Date(), updatedAt: new Date() }
+      { id_rol: 1, id_recurso: 2, id_permiso: 4, createdAt: new Date(), updatedAt: new Date() },
+      { id_rol: 1, id_recurso: 2, id_permiso: 5, createdAt: new Date(), updatedAt: new Date() }
     ]);
     console.log('✅ Seeder completo: Relaciones de Usuario, Rol y Permisos establecidas.');
   },
