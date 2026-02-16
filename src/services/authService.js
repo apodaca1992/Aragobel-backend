@@ -42,19 +42,27 @@ const login = async (usuario, contrasena) => {
     const permisosMap = {};
     if (usuarioConPermisos && usuarioConPermisos.Rols) {
         usuarioConPermisos.Rols.forEach(rol => {
-            rol.Recursos.forEach(recurso => {
-                const nombreRecurso = recurso.nombre;
-                if (!permisosMap[nombreRecurso]) permisosMap[nombreRecurso] = [];
+            if (rol.Recursos) {
+                rol.Recursos.forEach(recurso => {
+                    const nombreRecurso = recurso.nombre; // Ej: "ENTREGAS"
+                    
+                    if (!permisosMap[nombreRecurso]) {
+                        permisosMap[nombreRecurso] = [];
+                    }
 
-                // Accedemos a los permisos navegando por la tabla intermedia
-                if (recurso.RolRecursoPermisos) {
-                    recurso.RolRecursoPermisos.forEach(intermedia => {
-                        if (intermedia.Permiso) {
-                            permisosMap[nombreRecurso].push(intermedia.Permiso.tipo_permiso);
-                        }
-                    });
-                }
-            });
+                    // Navegamos por la tabla intermedia hacia el modelo Permiso
+                    if (recurso.RolRecursoPermisos) {
+                        recurso.RolRecursoPermisos.forEach(intermedia => {
+                            if (intermedia.Permiso) {
+                                // Evitamos duplicados si el usuario tiene varios roles con el mismo permiso
+                                if (!permisosMap[nombreRecurso].includes(intermedia.Permiso.tipo_permiso)) {
+                                    permisosMap[nombreRecurso].push(intermedia.Permiso.tipo_permiso);
+                                }
+                            }
+                        });
+                    }
+                });
+            }
         });
     }
 
