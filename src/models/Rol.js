@@ -3,9 +3,9 @@ const sequelize = require('../config/db');
 
 const Rol = sequelize.define('Rol', {
     id_rol: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true
+        defaultValue: DataTypes.UUIDV4
     },
     nombre: {
         type: DataTypes.STRING(100),
@@ -14,11 +14,14 @@ const Rol = sequelize.define('Rol', {
     descripcion: {
         type: DataTypes.STRING(100),
         allowNull: false
+    },
+    activo: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true // Por defecto, todo lo nuevo está activo
     }
 }, {
     tableName: 'roles',
-    timestamps: true,
-    paranoid: true
+    timestamps: true
 });
 
 module.exports = Rol;

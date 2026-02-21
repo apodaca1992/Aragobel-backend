@@ -3,7 +3,7 @@ const sequelize = require('../config/db');
 
 const RolRecursoPermiso = sequelize.define('RolRecursoPermiso', {
     id_rol: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
         references: {
             model: 'roles',
@@ -11,7 +11,7 @@ const RolRecursoPermiso = sequelize.define('RolRecursoPermiso', {
         }
     },
     id_recurso: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
         references: {
             model: 'recursos',
@@ -19,17 +19,20 @@ const RolRecursoPermiso = sequelize.define('RolRecursoPermiso', {
         }
     },
     id_permiso: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
         references: {
             model: 'permisos',
             key: 'id_permiso'
         }
+    },
+    activo: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true // Por defecto, todo lo nuevo está activo
     }
 }, {
     tableName: 'roles_recursos_permisos',
-    timestamps: true,
-    paranoid: true // Siguiendo tu lógica de borrado lógico
+    timestamps: true
 });
 
 module.exports = RolRecursoPermiso;

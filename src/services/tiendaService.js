@@ -1,6 +1,8 @@
 const Tienda = require('../models/Tienda');
 
-const getAll = async () => await Tienda.findAll();
+const getAll = async () => await Tienda.findAll({
+        where: { activo: true } // Filtro explícito (Compatible con Firestore)
+});
 
 const getById = async (id) => await Tienda.findByPk(id);
 
@@ -15,7 +17,9 @@ const update = async (id, data) => {
 const remove = async (id) => {
     const tienda = await Tienda.findByPk(id);
     if (!tienda) return null;
-    await tienda.destroy();
+    await tienda.update(
+        { activo: false }
+    );
     return true;
 };
 

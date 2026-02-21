@@ -3,9 +3,9 @@ const sequelize = require('../config/db');
 
 const Empleado = sequelize.define('Empleado', {
     id_empleado: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         primaryKey: true,
-        autoIncrement: true
+        defaultValue: DataTypes.UUIDV4
     },
     nombre: {
         type: DataTypes.STRING(100),
@@ -27,7 +27,7 @@ const Empleado = sequelize.define('Empleado', {
         }
     },
     id_tienda: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,
         references: {
             model: 'tiendas',
@@ -35,17 +35,20 @@ const Empleado = sequelize.define('Empleado', {
         }
     },
     id_puesto: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,
         references: {
             model: 'puestos',
             key: 'id_puesto'
         }
+    },
+    activo: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true // Por defecto, todo lo nuevo está activo
     }
 }, {
     tableName: 'empleados',
-    timestamps: true,
-    paranoid: true
+    timestamps: true
 });
 
 module.exports = Empleado;
