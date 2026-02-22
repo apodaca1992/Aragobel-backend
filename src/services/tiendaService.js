@@ -18,7 +18,10 @@ const remove = async (id) => {
     const tienda = await Tienda.findByPk(id);
     if (!tienda) return null;
     await tienda.update(
-        { activo: false }
+        { 
+            activo: false,
+            deletedAt: new Date() 
+        }
     );
     return true;
 };

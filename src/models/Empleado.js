@@ -45,6 +45,12 @@ const Empleado = sequelize.define('Empleado', {
     activo: {
         type: DataTypes.BOOLEAN,
         defaultValue: true // Por defecto, todo lo nuevo está activo
+    },
+    // Agregamos la columna para registrar la fecha de eliminación lógica
+    deletedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: null
     }
 }, {
     tableName: 'empleados',

@@ -43,7 +43,10 @@ const remove = async (id) => {
     const recurso = await Recurso.findByPk(id);
     if (!recurso) return null;
     await recurso.update(
-        { activo: false }
+        { 
+            activo: false,
+            deletedAt: new Date() 
+        }
     );
     return true;
 };
