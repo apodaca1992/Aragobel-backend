@@ -19,6 +19,10 @@ const Recurso = sequelize.define('Recurso', {
             key: 'id_aplicacion'
         }
     },
+    aplicacion_nombre_snap: {
+        type: DataTypes.STRING(100),
+        allowNull: false
+    },
     activo: {
         type: DataTypes.BOOLEAN,
         defaultValue: true // Por defecto, todo lo nuevo está activo

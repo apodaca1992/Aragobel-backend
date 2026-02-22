@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS recursos (
     id_recurso VARCHAR(36) NOT NULL,
     nombre VARCHAR(100) NOT NULL, -- Ejemplo: 'Tabla_Nomina', 'Dashboard'
     id_aplicacion VARCHAR(36) NOT NULL,
+    aplicacion_nombre_snap VARCHAR(100) NOT NULL,
     activo BOOLEAN DEFAULT TRUE,
     PRIMARY KEY (id_recurso),
     CONSTRAINT fk_rec_app FOREIGN KEY (id_aplicacion) REFERENCES aplicaciones (id_aplicacion)
@@ -224,4 +225,3 @@ CREATE TABLE IF NOT EXISTS dispositivos_android (
     CONSTRAINT fk_dispositivo_usuario FOREIGN KEY (id_usuario) REFERENCES usuarios(id_usuario),
     CONSTRAINT unique_android_id UNIQUE (android_id)
 );
-
