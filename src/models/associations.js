@@ -8,6 +8,7 @@ const Tienda = require('./Tienda');
 const Puesto = require('./Puesto');
 const UsuarioRol = require('./UsuarioRol');
 const RolRecursoPermiso = require('./RolRecursoPermiso');
+const { syncSnapshots } = require('../utils/sequelize-snaps'); // Ajusta la ruta
 
 const setupAssociations = () => {
     // 1. Relación: Empleado <-> Tienda y Puesto
@@ -56,6 +57,12 @@ const setupAssociations = () => {
     
     RolRecursoPermiso.belongsTo(Rol, { foreignKey: 'id_rol' });
     RolRecursoPermiso.belongsTo(Recurso, { foreignKey: 'id_recurso' });
+
+    // 6. Configuración de Snaps Automáticos
+    syncSnapshots(Aplicacion, Recurso, 'id_aplicacion', {
+        'nombre': 'aplicacion_nombre_snap'
+        // 'icono': 'aplicacion_icono_snap' <-- Si mañana agregas otro, solo lo pones aquí
+    });
 };
 
 module.exports = { 
