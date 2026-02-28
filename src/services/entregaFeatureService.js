@@ -1,9 +1,10 @@
 //const { Entrega, Tienda, Usuario } = require('../models');
+const Authorization = require('../utils/Authorization');
 
 /**
  * Lógica para obtener entregas filtradas por rol
  */
-const listarEntregasService = async (idUsuario, roles) => {
+const listarEntregasService = async (user) => {
     // 1. Configuramos la base de la consulta
     let opcionesBusqueda = {
         include: [
@@ -14,10 +15,8 @@ const listarEntregasService = async (idUsuario, roles) => {
     };
 
     // 2. Aplicamos lógica de negocio (Filtro por Rol)
-    const esAdmin = roles.includes('ADMINISTRADOR');
-
-    if (!esAdmin) {
-        opcionesBusqueda.where = { id_usuario: idUsuario };
+    if (!Authorization.isAdmin(user)) {
+        opcionesBusqueda.where = { id_usuario: user.idUsuario };
     }
 
     // 3. Ejecutamos la consulta
@@ -29,8 +28,7 @@ const listarEntregasService = async (idUsuario, roles) => {
         esAdmin
     };*/
     return {
-        entregas,
-        esAdmin
+        entregas
     };
 };
 
