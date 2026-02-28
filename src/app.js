@@ -1,5 +1,6 @@
 const express = require('express');
 const app = express();
+const globalErrorHandler = require('./middlewares/errorMiddleware');
 
 // Rutas (las crearemos en un momento)
 const authRoutes = require('./routes/authRoutes');
@@ -22,5 +23,8 @@ app.use('/api/tiendas', tiendaRoutes);
 app.use('/api/entregas', entregaFeatureRoutes);
 app.use('/api/recursos', recursoRoutes);
 app.use('/api/aplicaciones', aplicacionRoutes);
+
+// ESTE DEBE SER EL ÚLTIMO MIDDLEWARE
+app.use(globalErrorHandler);
 
 module.exports = app;

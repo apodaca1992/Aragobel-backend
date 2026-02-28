@@ -1,36 +1,30 @@
 const tiendaService = require('../services/tiendaService');
+const catchAsync = require('../utils/catchAsync');
 
-const getTiendas = async (req, res) => {
-    try {
-        const tiendas = await tiendaService.getAll();
-        res.status(200).json(tiendas);
-    } catch (error) {
-        res.status(500).json({ message: 'Error al obtener tiendas', error: error.message });
-    }
-};
+exports.getTiendas = catchAsync(async (req, res, next) => {
+    const tiendas = await tiendaService.getAll();
+    return res.status(200).json({
+        length: tiendas.length,
+        data: tiendas
+    });
+});
 
-const getTiendaById = async (req, res) => {
+exports.getTiendaById = catchAsync(async (req, res, next) => {
     const tienda = await tiendaService.getById(req.params.id);
     tienda ? res.json(tienda) : res.status(404).json({ error: 'Tienda no encontrada' });
-};
+});
 
-const createTienda = async (req, res) => {
-    try {
-        const nuevaTienda = await tiendaService.create(req.body);
-        res.status(201).json(nuevaTienda);
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-};
+exports.createTienda = catchAsync(async (req, res, next) => {
+    const nuevaTienda = await tiendaService.create(req.body);
+    res.status(201).json(nuevaTienda);    
+});
 
-const updateTienda = async (req, res) => {
+exports.updateTienda = catchAsync(async (req, res, next) => {
     const actualizada = await tiendaService.update(req.params.id, req.body);
     actualizada ? res.json(actualizada) : res.status(404).json({ error: 'No se pudo actualizar' });
-};
+});
 
-const deleteTienda = async (req, res) => {
+exports.deleteTienda = catchAsync(async (req, res, next) => {
     const eliminado = await tiendaService.remove(req.params.id);
     eliminado ? res.json({ mensaje: 'Tienda eliminada' }) : res.status(404).json({ error: 'Tienda no encontrada' });
-};
-
-module.exports = { getTiendas, getTiendaById, createTienda, updateTienda, deleteTienda };
+});

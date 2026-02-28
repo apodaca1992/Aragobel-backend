@@ -1,3 +1,4 @@
+const AppError = require('../utils/appError');
 /**
  * Sincroniza campos denormalizados (snaps) entre un Padre y un Hijo.
  */
@@ -12,7 +13,8 @@ const syncSnapshots = (ModelPadre, ModelHijo, foreignKey, camposMap) => {
             });
 
             if (!padre) {
-                throw new Error(`Integridad: No existe ${ModelPadre.name} con ID ${instanciaHija[foreignKey]}`);
+                // Lanzamos un error operacional de tipo 400
+                throw new AppError(`Integridad: El recurso padre ${ModelPadre.name} no existe.`, 400);
             }
 
             Object.entries(camposMap).forEach(([campoPadre, campoSnap]) => {
