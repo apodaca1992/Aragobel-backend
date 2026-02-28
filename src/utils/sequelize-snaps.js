@@ -48,6 +48,29 @@ const syncSnapshots = (ModelPadre, ModelHijo, foreignKey, camposMap) => {
             });
         }
     });
+
+    // Usamos beforeUpdate porque estamos haciendo borrado lógico (activo: false)
+    ModelPadre.beforeUpdate(async (instanciaPadre, options) => {
+        
+        // Verificamos si el usuario está intentando desactivar el registro
+        if (instanciaPadre.changed('activo') && instanciaPadre.activo === false) {
+            
+            const conteoHijos = await ModelHijo.count({
+                where: { 
+                    [foreignKey]: instanciaPadre[ModelPadre.primaryKeyAttribute],
+                    activo: true // Solo nos importan los hijos que aún están activos
+                },
+                transaction: options.transaction
+            });
+
+            if (conteoHijos > 0) {
+                throw new AppError(
+                    `No se puede eliminar ${ModelPadre.name} porque tiene ${conteoHijos} ${ModelHijo.name}(s) asociados y activos.`, 
+                    400
+                );
+            }
+        }
+    });
 };
 
 module.exports = { syncSnapshots };
