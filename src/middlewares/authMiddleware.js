@@ -1,6 +1,6 @@
-const jwt = require('jsonwebtoken');
 const Authorization = require('../utils/Authorization');
 const AppError = require('../utils/appError');
+const JwtUtils = require('../utils/jwtUtils');
 
 const validarToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
@@ -11,7 +11,7 @@ const validarToken = (req, res, next) => {
         return next(new AppError('Acceso denegado. Token no proporcionado.', 401));
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = JwtUtils.verificarToken(token);
     req.user = decoded; // Guardamos los datos del usuario en la petición
     return next(); // Continuar al controlador
 };

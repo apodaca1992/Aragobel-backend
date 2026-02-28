@@ -1,15 +1,9 @@
-//const Usuario = require('../models/Usuario'); // Asegúrate de tener este modelo
-// IMPORTANTE: Importamos desde associations, no desde models directamente
 const { Usuario, Rol, Recurso, Permiso, RolRecursoPermiso } = require('../models');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const cryptoUtils = require('../utils/cryptoUtils');
+const JwtUtils = require('../utils/jwtUtils');
 
 const registrar = async (datos) => {
-    // 1. Encriptar contraseña
-    const salt = await bcrypt.genSalt(10);
-    const hash = await bcrypt.hash(datos.contrasena, salt);
-    
-    // 2. Sobrescribir la contraseña con el hash y crear
+    const hash = await cryptoUtils.hashPassword(datos.contrasena);
     return await Usuario.create({
         ...datos,
         contrasena: hash
@@ -22,7 +16,7 @@ const login = async (usuario, contrasena) => {
     if (!user) return null;
 
     // 2. Comparar contraseña (bcrypt maneja el hash)
-    const isMatch = await bcrypt.compare(contrasena, user.contrasena);
+    const isMatch = await cryptoUtils.comparePassword(contrasena, user.contrasena);
     if (!isMatch) return null;
 
     // --- NUEVO: Obtener Permisos ---
@@ -69,17 +63,12 @@ const login = async (usuario, contrasena) => {
     // Extraemos todos los nombres de los roles y los pasamos a Mayúsculas
     const roles = usuarioConPermisos.Rols.map(r => r.nombre.toUpperCase());
 
-    // 3. Generar Token
-    const token = jwt.sign(
-        { 
+    const token = JwtUtils.generarToken({ 
             id: user.id_usuario, 
             usuario: user.usuario,
             roles: roles,
             permisos: permisosMap // <--- Se agregan aquí
-        },
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN }
-    );
+        });
 
     return { 
         user: { id: user.id_usuario, usuario: user.usuario, roles },
@@ -88,47 +77,4 @@ const login = async (usuario, contrasena) => {
     };
 };
 
-const obtenerPermisosUsuario = async (id_usuario) => {
-    try {
-        const usuarioConPermisos = await Usuario.findByPk(id_usuario, {
-            include: [{
-                model: Rol,
-                through: { attributes: [] }, // No queremos los datos de la tabla intermedia usuarios_roles
-                include: [{
-                    model: Recurso,
-                    through: { attributes: [] }, // No queremos los datos de roles_recursos_permisos
-                    include: [{
-                        model: Permiso,
-                        // Aquí es donde traemos los nombres de los permisos (VER, CREAR, etc.)
-                    }]
-                }]
-            }]
-        });
-
-        if (!usuarioConPermisos) return null;
-
-        // Formatear la respuesta para que sea fácil de usar en el Frontend
-        const permisosFormateados = {};
-
-        usuarioConPermisos.Rols.forEach(rol => {
-            rol.Recursos.forEach(recurso => {
-                if (!permisosFormateados[recurso.nombre]) {
-                    permisosFormateados[recurso.nombre] = [];
-                }
-                // Agregamos los tipos de permiso (VER, CREAR...) al recurso correspondiente
-                recurso.Permisos.forEach(p => {
-                    if (!permisosFormateados[recurso.nombre].includes(p.tipo_permiso)) {
-                        permisosFormateados[recurso.nombre].push(p.tipo_permiso);
-                    }
-                });
-            });
-        });
-
-        return permisosFormateados;
-    } catch (error) {
-        console.error("Error al obtener permisos:", error);
-        throw error;
-    }
-};
-
-module.exports = { registrar, login, obtenerPermisosUsuario };
+module.exports = { registrar, login };
