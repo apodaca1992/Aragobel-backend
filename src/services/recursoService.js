@@ -1,5 +1,4 @@
-const Recurso = require('../models/Recurso');
-const Aplicacion = require('../models/Aplicacion');
+const { Recurso, Aplicacion } = require('../models');
 
 const getAll = async () => await Recurso.findAll({
         where: { activo: true } // Filtro explícito (Compatible con Firestore)

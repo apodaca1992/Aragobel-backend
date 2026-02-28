@@ -1,4 +1,4 @@
-const Aplicacion = require('../models/Aplicacion');
+const { Aplicacion } = require('../models');
 
 const getAll = async () => await Aplicacion.findAll({
         where: { activo: true } // Filtro explícito (Compatible con Firestore)

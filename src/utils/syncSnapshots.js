@@ -1,4 +1,4 @@
-const AppError = require('../utils/appError');
+const AppError = require('./appError');
 /**
  * Sincroniza campos denormalizados (snaps) entre un Padre y un Hijo.
  */

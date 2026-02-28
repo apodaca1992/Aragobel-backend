@@ -1,6 +1,6 @@
 //const Usuario = require('../models/Usuario'); // Asegúrate de tener este modelo
 // IMPORTANTE: Importamos desde associations, no desde models directamente
-const { Usuario, Rol, Recurso, Permiso, RolRecursoPermiso } = require('../models/associations');
+const { Usuario, Rol, Recurso, Permiso, RolRecursoPermiso } = require('../models');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 

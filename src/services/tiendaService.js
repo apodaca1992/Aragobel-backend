@@ -1,4 +1,5 @@
-const Tienda = require('../models/Tienda');
+const { Tienda } = require('../models');
+
 
 const getAll = async () => await Tienda.findAll({
         where: { activo: true } // Filtro explícito (Compatible con Firestore)
