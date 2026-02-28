@@ -3,7 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const { validarToken, checkPermission } = require('../middlewares/authMiddleware');
 
-router.post('/register', checkPermission(), validarToken, authController.register);
+router.post('/register', validarToken, checkPermission(), authController.register);
 router.post('/login', authController.login);
 
 module.exports = router;

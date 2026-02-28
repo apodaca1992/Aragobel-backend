@@ -4,10 +4,10 @@ const recursoController = require('../controllers/recursoController');
 const { validarToken, checkPermission } = require('../middlewares/authMiddleware');
 
 // GET /api/recursos
-router.get('/', checkPermission(), validarToken, recursoController.getRecursos);           // Listar todas
-router.get('/:id', checkPermission(), validarToken, recursoController.getRecursoById);    // Ver una
-router.post('/', checkPermission(), validarToken, recursoController.createRecurso);      // Crear
-router.put('/:id', checkPermission(), validarToken, recursoController.updateRecurso);     // Actualizar
-router.delete('/:id', checkPermission(), validarToken, recursoController.deleteRecurso);  // Borrar
+router.get('/', validarToken, checkPermission(), recursoController.getRecursos);           // Listar todas
+router.get('/:id', validarToken, checkPermission(), recursoController.getRecursoById);    // Ver una
+router.post('/', validarToken, checkPermission(), recursoController.createRecurso);      // Crear
+router.put('/:id', validarToken, checkPermission(), recursoController.updateRecurso);     // Actualizar
+router.delete('/:id', validarToken, checkPermission(), recursoController.deleteRecurso);  // Borrar
 
 module.exports = router;

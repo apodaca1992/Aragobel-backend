@@ -4,10 +4,10 @@ const tiendaController = require('../controllers/tiendaController');
 const { validarToken, checkPermission } = require('../middlewares/authMiddleware');
 
 // GET /api/tiendas
-router.get('/', checkPermission(), validarToken, tiendaController.getTiendas);           // Listar todas
-router.get('/:id', checkPermission(), validarToken, tiendaController.getTiendaById);     // Ver una
-router.post('/', checkPermission(), validarToken, tiendaController.createTienda);        // Crear
-router.put('/:id', checkPermission(), validarToken, tiendaController.updateTienda);      // Actualizar
-router.delete('/:id', checkPermission(), validarToken, tiendaController.deleteTienda);   // Borrar
+router.get('/', validarToken, checkPermission(), tiendaController.getTiendas);           // Listar todas
+router.get('/:id', validarToken, checkPermission(), tiendaController.getTiendaById);     // Ver una
+router.post('/', validarToken, checkPermission(), tiendaController.createTienda);        // Crear
+router.put('/:id', validarToken, checkPermission(), tiendaController.updateTienda);      // Actualizar
+router.delete('/:id', validarToken, checkPermission(), tiendaController.deleteTienda);   // Borrar
 
 module.exports = router;
