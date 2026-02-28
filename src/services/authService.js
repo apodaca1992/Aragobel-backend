@@ -19,11 +19,11 @@ const registrar = async (datos) => {
 const login = async (usuario, contrasena) => {
     // 1. Buscar usuario por nombre de usuario
     const user = await Usuario.findOne({ where: { usuario } });
-    if (!user) throw new Error('Usuario no encontrado');
+    if (!user) return null;
 
     // 2. Comparar contraseña (bcrypt maneja el hash)
     const isMatch = await bcrypt.compare(contrasena, user.contrasena);
-    if (!isMatch) throw new Error('Contraseña incorrecta');
+    if (!isMatch) return null;
 
     // --- NUEVO: Obtener Permisos ---
     const usuarioConPermisos = await Usuario.findByPk(user.id_usuario, {

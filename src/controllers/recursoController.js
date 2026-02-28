@@ -1,5 +1,6 @@
 const recursoService = require('../services/recursoService');
 const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/appError');
 
 exports.getRecursos = catchAsync(async (req, res, next) => {
     const recursos = await recursoService.getAll();
@@ -12,20 +13,41 @@ exports.getRecursos = catchAsync(async (req, res, next) => {
 
 exports.getRecursoById = catchAsync(async (req, res, next) => {
     const recurso = await recursoService.getById(req.params.id);
-    recurso ? res.json(recurso) : res.status(404).json({ error: 'Recurso no encontrado' });
+
+    if (!recurso) {
+        return next(new AppError('No se pudo encontrar', 404));
+    }
+
+    return res.status(200).json({
+        data: recurso
+    });
 });
 
 exports.createRecurso = catchAsync(async (req, res, next) => {
     const nuevoRecurso = await recursoService.create(req.body);
-    res.status(201).json(nuevoRecurso);    
+    return res.status(201).json(nuevoRecurso);    
 });
 
 exports.updateRecurso = catchAsync(async (req, res, next) => {
     const actualizado = await recursoService.update(req.params.id, req.body);
-    actualizado ? res.json(actualizado) : res.status(404).json({ error: 'No se pudo actualizar' });
+
+    if (!actualizado) {
+        return next(new AppError('No se pudo actualizar', 404));
+    }
+
+    return res.status(200).json({
+        data: actualizado
+    });
 });
 
 exports.deleteRecurso = catchAsync(async (req, res, next) => {
     const eliminado = await recursoService.remove(req.params.id);
-    eliminado ? res.json({ mensaje: 'Recurso eliminado' }) : res.status(404).json({ error: 'Recurso no encontrado' });
+
+    if (!eliminado) {
+        return next(new AppError('No se pudo eliminar', 404));
+    }
+
+    return res.status(200).json({
+        message: 'Se elimino correctamente'
+    });
 });

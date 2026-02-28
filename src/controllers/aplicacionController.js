@@ -1,5 +1,6 @@
 const aplicacionService = require('../services/aplicacionService');
 const catchAsync = require('../utils/catchAsync');
+const AppError = require('../utils/appError');
 
 exports.getAplicaciones = catchAsync(async (req, res, next) => {
     const aplicaciones = await aplicacionService.getAll();
@@ -11,20 +12,41 @@ exports.getAplicaciones = catchAsync(async (req, res, next) => {
 
 exports.getAplicacionById = catchAsync(async (req, res, next) => {
     const aplicacion = await aplicacionService.getById(req.params.id);
-    aplicacion ? res.json(aplicacion) : res.status(404).json({ error: 'Aplicacion no encontrado' });
+
+    if (!aplicacion) {
+        return next(new AppError('No se pudo encontrar', 404));
+    }
+
+    return res.status(200).json({
+        data: aplicacion
+    });
 });
 
 exports.createAplicacion = catchAsync(async (req, res, next) => {
     const nuevoAplicacion = await aplicacionService.create(req.body);
-    res.status(201).json(nuevoAplicacion);
+    return res.status(201).json(nuevoAplicacion);
 });
 
 exports.updateAplicacion = catchAsync(async (req, res, next) => {
     const actualizado = await aplicacionService.update(req.params.id, req.body);
-    actualizado ? res.json(actualizado) : res.status(404).json({ error: 'No se pudo actualizar' });
+
+    if (!actualizado) {
+        return next(new AppError('No se pudo actualizar', 404));
+    }
+
+    return res.status(200).json({
+        data: actualizado
+    });
 });
 
 exports.deleteAplicacion = catchAsync(async (req, res, next) => {
     const eliminado = await aplicacionService.remove(req.params.id);
-    eliminado ? res.json({ mensaje: 'Aplicacion eliminado' }) : res.status(404).json({ error: 'Aplicacion no encontrado' });
+
+    if (!eliminado) {
+        return next(new AppError('No se pudo eliminar', 404));
+    }
+
+    return res.status(200).json({
+        message: 'Se elimino correctamente'
+    });
 });

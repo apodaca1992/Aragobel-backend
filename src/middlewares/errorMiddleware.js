@@ -1,5 +1,4 @@
 // middleware/errorMiddleware.js
-const AppError = require('../utils/appError');
 
 const sendErrorDev = (err, res) => {
     res.status(err.statusCode).json({
