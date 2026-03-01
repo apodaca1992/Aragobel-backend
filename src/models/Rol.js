@@ -15,6 +15,11 @@ const Rol = sequelize.define('Rol', {
         type: DataTypes.STRING(100),
         allowNull: false
     },
+    permisos: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: {}
+    },
     activo: {
         type: DataTypes.BOOLEAN,
         defaultValue: true // Por defecto, todo lo nuevo está activo

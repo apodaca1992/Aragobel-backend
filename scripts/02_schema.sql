@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS aplicaciones (
 CREATE TABLE IF NOT EXISTS roles (
     id_rol VARCHAR(36) NOT NULL,
     nombre VARCHAR(100) NOT NULL,
-    descripcion VARCHAR(100) NOT NULL,
+    descripcion VARCHAR(100) NOT NULL,,
+    permisos JSON NOT NULL DEFAULT (JSON_OBJECT()),
     activo BOOLEAN DEFAULT TRUE,
     PRIMARY KEY (id_rol)
 );
