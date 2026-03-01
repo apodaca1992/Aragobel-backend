@@ -1,21 +1,15 @@
-// src/utils/Authorization.js
-class Authorization {
-    /**
-     * Define los roles que tienen acceso total al sistema
-     */
-    static get SUPER_ROLES() {
-        return ['ADMINISTRADOR', 'ADMIN', 'ROOT','SUPERADMIN'];
-    }
+const { SUPER_ROLES,RECURSOS, ACCIONES } = require('../config/constants');
 
+class Authorization {
     /**
      * Mapea métodos HTTP a acciones de negocio
      */
     static getActionByMethod(method, hasId = false) {
         const mapping = {
-            'GET': hasId ? 'VER' : 'LISTAR',
-            'POST': 'CREAR',
-            'PUT': 'EDITAR',
-            'DELETE': 'ELIMINAR'
+            'GET': hasId ? ACCIONES.VER : ACCIONES.LISTAR,
+            'POST': ACCIONES.CREAR,
+            'PUT': ACCIONES.EDITAR,
+            'DELETE': ACCIONES.ELIMINAR
         };
         return mapping[method.toUpperCase()] || null;
     }
@@ -25,19 +19,22 @@ class Authorization {
      */
     static isAdmin(user) {
         if (!user || !user.roles) return false;
-        return user.roles.some(rol => this.SUPER_ROLES.includes(rol.toUpperCase()));
+        return user.roles.some(rol => SUPER_ROLES.includes(rol.toUpperCase()));
     }
 
     /**
      * Valida si el usuario tiene un permiso específico sobre un recurso
      */
     static hasPermission(user, recurso, accion) {
-        // 1. Si es admin, tiene permiso automático
         if (this.isAdmin(user)) return true;
+        if (!user || !user.permissions) return false;
 
-        // 2. Verificar permisos específicos
-        const permissions = user.permissions || {};
-        return permissions[recurso] && permissions[recurso].includes(accion);
+        if (!RECURSOS[recurso]) {
+            return false;
+        }
+
+        const userPermissions = user.permissions[recurso] || [];
+        return userPermissions.includes(accion);
     }
 }
 
