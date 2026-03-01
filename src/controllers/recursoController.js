@@ -15,6 +15,7 @@ exports.getRecursoById = catchAsync(async (req, res, next) => {
     const recurso = await recursoService.getById(req.params.id);
 
     if (!recurso) {
+        logger.warn(`Recurso no encontrado`, { id, user: req.user?.id });
         return next(new AppError('No se pudo encontrar', 404));
     }
 
@@ -32,6 +33,10 @@ exports.updateRecurso = catchAsync(async (req, res, next) => {
     const actualizado = await recursoService.update(req.params.id, req.body);
 
     if (!actualizado) {
+        logger.warn(`Intento de actualización del Recurso fallido:`, { 
+            id: req.params.id, 
+            user: req.user?.id 
+        });
         return next(new AppError('No se pudo actualizar', 404));
     }
 
@@ -44,6 +49,10 @@ exports.deleteRecurso = catchAsync(async (req, res, next) => {
     const eliminado = await recursoService.remove(req.params.id);
 
     if (!eliminado) {
+        logger.error(`Error crítico: Fallo al eliminar el Recurso`, { 
+            id: req.params.id, 
+            user: req.user?.id 
+        });
         return next(new AppError('No se pudo eliminar', 404));
     }
 

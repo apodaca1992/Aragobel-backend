@@ -1,4 +1,5 @@
 const AppError = require('./appError');
+const logger = require('./logger');
 /**
  * Sincroniza campos denormalizados (snaps) entre un Padre y un Hijo.
  */
@@ -13,7 +14,11 @@ const syncSnapshots = (ModelPadre, ModelHijo, foreignKey, camposMap) => {
             });
 
             if (!padre) {
-                // Lanzamos un error operacional de tipo 400
+                logger.error('Fallo de integridad referencial en hidratación', {
+                    modeloHijo: ModelHijo.name,
+                    padreEsperado: ModelPadre.name,
+                    idPadre: instanciaHija[foreignKey]
+                });
                 throw new AppError(`Integridad: El recurso padre ${ModelPadre.name} no existe.`, 400);
             }
 
@@ -64,6 +69,11 @@ const syncSnapshots = (ModelPadre, ModelHijo, foreignKey, camposMap) => {
             });
 
             if (conteoHijos > 0) {
+                logger.warn('Intento de borrado lógico bloqueado por dependencia', {
+                    modeloPadre: ModelPadre.name,
+                    padreId: instanciaPadre.id,
+                    hijosActivos: conteoHijos
+                });
                 throw new AppError(
                     `No se puede eliminar ${ModelPadre.name} porque tiene ${conteoHijos} ${ModelHijo.name}(s) asociados y activos.`, 
                     400

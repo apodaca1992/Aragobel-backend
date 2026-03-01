@@ -14,6 +14,7 @@ exports.getTiendaById = catchAsync(async (req, res, next) => {
     const tienda = await tiendaService.getById(req.params.id);
 
     if (!tienda) {
+        logger.warn(`Tienda no encontrada`, { id, user: req.user?.id });
         return next(new AppError('No se pudo encontrar', 404));
     }
 
@@ -31,6 +32,10 @@ exports.updateTienda = catchAsync(async (req, res, next) => {
     const actualizado = await tiendaService.update(req.params.id, req.body);
 
     if (!actualizado) {
+        logger.warn(`Intento de actualización de la Tienda fallido:`, { 
+            id: req.params.id, 
+            user: req.user?.id 
+        });
         return next(new AppError('No se pudo actualizar', 404));
     }
 
@@ -43,6 +48,10 @@ exports.deleteTienda = catchAsync(async (req, res, next) => {
     const eliminado = await tiendaService.remove(req.params.id);
 
     if (!eliminado) {
+        logger.error(`Error crítico: Fallo al eliminar la Tienda`, { 
+            id: req.params.id, 
+            user: req.user?.id 
+        });
         return next(new AppError('No se pudo eliminar', 404));
     }
 

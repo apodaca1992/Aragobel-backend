@@ -16,12 +16,20 @@ exports.login = catchAsync(async (req, res, next) => {
     const { usuario, contrasena } = req.body;
 
     if (!usuario || !contrasena) {
+        logger.warn(`Usuario y contraseña son requeridos:`, { 
+            id: req.params.id, 
+            user: req.user?.id 
+        });
         return next(new AppError('Usuario y contraseña son requeridos', 400));
     }
 
     const data = await authService.login(usuario, contrasena);
     
     if (!data) {
+        logger.warn(`Credenciales incorrectas:`, { 
+            id: req.params.id, 
+            user: req.user?.id 
+        });
         return next(new AppError('Credenciales incorrectas', 401));
     }
 
