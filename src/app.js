@@ -6,8 +6,6 @@ const globalErrorHandler = require('./middlewares/errorMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const tiendaRoutes = require('./routes/tiendaRoutes');
 const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
-const recursoRoutes = require('./routes/recursoRoutes');
-const aplicacionRoutes = require('./routes/aplicacionRoutes');
 const empleadoRoutes = require('./routes/empleadoRoutes');
 
 // Middlewares para entender JSON
@@ -22,8 +20,6 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes); // Prefijo para login, registro, etc.
 app.use('/api/tiendas', tiendaRoutes);
 app.use('/api/entregas', entregaFeatureRoutes);
-app.use('/api/recursos', recursoRoutes);
-app.use('/api/aplicaciones', aplicacionRoutes);
 app.use('/api/empleados', empleadoRoutes);
 
 // ESTE DEBE SER EL ÚLTIMO MIDDLEWARE
