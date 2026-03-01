@@ -34,6 +34,10 @@ const Empleado = sequelize.define('Empleado', {
             key: 'id_tienda'
         }
     },
+    tienda_nombre_snap: {
+        type: DataTypes.STRING(50),
+        allowNull: false
+    },
     id_puesto: {
         type: DataTypes.UUID,
         allowNull: false,
@@ -41,6 +45,10 @@ const Empleado = sequelize.define('Empleado', {
             model: 'puestos',
             key: 'id_puesto'
         }
+    },
+    puesto_nombre_snap: {
+        type: DataTypes.STRING(50),
+        allowNull: false
     },
     activo: {
         type: DataTypes.BOOLEAN,

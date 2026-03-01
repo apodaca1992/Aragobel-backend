@@ -66,6 +66,12 @@ syncSnapshots(Aplicacion, Recurso, 'id_aplicacion', {
     'nombre': 'aplicacion_nombre_snap'
     // 'icono': 'aplicacion_icono_snap' <-- Si mañana agregas otro, solo lo pones aquí
 });
+syncSnapshots(Tienda, Empleado, 'id_tienda', {
+    'nombre': 'tienda_nombre_snap'
+});
+syncSnapshots(Puesto, Empleado, 'id_puesto', {
+    'nombre': 'puesto_nombre_snap'
+});
 
 // 4. Exportación del Objeto DB
 // Esto permite importar todo con: const { Recurso, Aplicacion } = require('../models');
