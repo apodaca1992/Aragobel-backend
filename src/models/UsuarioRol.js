@@ -4,13 +4,11 @@ const sequelize = require('../config/db');
 const UsuarioRol = sequelize.define('UsuarioRol', {
     id_usuario: {
         type: DataTypes.UUID,
-        primaryKey: true,
-        references: { model: 'usuarios', key: 'id_usuario' }
+        primaryKey: true
     },
     id_rol: {
         type: DataTypes.UUID,
-        primaryKey: true,
-        references: { model: 'roles', key: 'id_rol' }
+        primaryKey: true
     },
     activo: {
         type: DataTypes.BOOLEAN,

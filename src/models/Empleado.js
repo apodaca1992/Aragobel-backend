@@ -28,11 +28,7 @@ const Empleado = sequelize.define('Empleado', {
     },
     id_tienda: {
         type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'tiendas',
-            key: 'id_tienda'
-        }
+        allowNull: false
     },
     tienda_nombre_snap: {
         type: DataTypes.STRING(50),
@@ -40,11 +36,7 @@ const Empleado = sequelize.define('Empleado', {
     },
     id_puesto: {
         type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'puestos',
-            key: 'id_puesto'
-        }
+        allowNull: false
     },
     puesto_nombre_snap: {
         type: DataTypes.STRING(50),

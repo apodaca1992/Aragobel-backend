@@ -27,11 +27,7 @@ const Usuario = sequelize.define('Usuario', {
     },
     id_empleado: {
         type: DataTypes.UUID,
-        allowNull: false,
-        references: {
-            model: 'empleados', // Nombre de la tabla en la DB
-            key: 'id_empleado'
-        }
+        allowNull: false
     },
     activo: {
         type: DataTypes.BOOLEAN,
