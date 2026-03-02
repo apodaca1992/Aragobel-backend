@@ -1,5 +1,6 @@
 const { Rol } = require('../models');
 const { Op } = require('sequelize');
+const AppError = require('../utils/appError');
 
 
 const getAll = async () => await Rol.findAll({
@@ -18,7 +19,7 @@ const create = async (data) => {
 
     if (rolExistente) {
         // Lanzamos un error de negocio claro
-        const error = new Error(`El rol '${nombreNormalizado}' ya existe en el sistema.`);
+        const error = new AppError(`El rol '${nombreNormalizado}' ya existe en el sistema.`);
         error.statusCode = 400; // Bad Request
         throw error;
     }
@@ -32,7 +33,7 @@ const create = async (data) => {
 const update = async (id, data) => {
     const rol = await Rol.findByPk(id);
     if (!rol) {
-        const error = new Error(`No se encontró el rol con ID: ${id}`);
+        const error = new AppError(`No se encontró el rol con ID: ${id}`);
         error.statusCode = 404; // Not Found
         throw error;
     }
@@ -49,7 +50,7 @@ const update = async (id, data) => {
         });
 
         if (existeOtro) {
-            const error = new Error(`El nombre '${nombreNormalizado}' ya está en uso por otro rol.`);
+            const error = new AppError(`El nombre '${nombreNormalizado}' ya está en uso por otro rol.`);
             error.statusCode = 400; // Bad Request
             throw error;
         }

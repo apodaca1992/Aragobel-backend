@@ -65,21 +65,36 @@ const sendErrorProd = (err, req, res) => {
     });
 };
 
+const handleValidationErrorJoi = err => {
+    // Si el error viene de Joi, ya trae un mensaje formateado con todos los detalles
+    return new AppError(err.message, 400);
+};
+
 module.exports = (err, req, res, next) => {
-    let error = { ...err };
-    error.message = err.message; // La desestructuración no copia propiedades no enumerables
-    error.statusCode = err.statusCode || 500;
-    error.status = err.status || 'error';
+    // 1. Mantenemos el objeto original pero aseguramos los defaults
+    err.statusCode = err.statusCode || 500;
+    err.status = err.status || 'error';
 
     if (process.env.NODE_ENV === 'development') {
-        sendErrorDev(error, req, res);
+        sendErrorDev(err, req, res);
     } else {
-        // Normalizar errores específicos de bases de datos o seguridad
+        // 2. IMPORTANTE: En producción, trabajamos sobre el objeto 'err' directamente
+        // o creamos una copia que explícitamente mantenga el mensaje y el flag
+        let error = Object.assign(err); 
+        error.message = err.message;
+
+        // 1. Detectar errores de Joi
+        if (err.name === 'ValidationError') error = handleValidationErrorJoi(error);
+        
+        // 2. Errores de Base de Datos
         if (err.name === 'CastError') error = handleCastErrorDB(error);
         if (err.code === 11000) error = handleDuplicateFieldsDB(error);
+        
+        // 3. Seguridad
         if (err.name === 'JsonWebTokenError') error = handleJWTError();
         if (err.name === 'TokenExpiredError') error = new AppError('Su sesión ha expirado.', 401);
 
+        // 3. Enviamos a producción (Aquí se revisará el .isOperational)
         sendErrorProd(error, req, res);
     }
 };
