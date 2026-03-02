@@ -21,10 +21,7 @@ const Empleado = sequelize.define('Empleado', {
     },
     email: {
         type: DataTypes.STRING(100),
-        allowNull: true,
-        validate: {
-            isEmail: true // Validación básica de formato de correo
-        }
+        allowNull: true
     },
     id_tienda: {
         type: DataTypes.UUID,
