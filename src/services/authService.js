@@ -2,6 +2,7 @@ const { Usuario, Rol } = require('../models');
 const cryptoUtils = require('../utils/cryptoUtils');
 const JwtUtils = require('../utils/jwtUtils');
 const logger = require('../utils/logger');
+const AppError = require('../utils/appError');
 
 const registrar = async (datos) => {
     const hash = await cryptoUtils.hashPassword(datos.contrasena);
@@ -25,14 +26,14 @@ const login = async (usuario, contrasena) => {
 
     if (!user) {
         logger.warn(`Intento de login fallido: Usuario no encontrado (${usuario})`);
-        return null;
+        throw new AppError('Credenciales incorrectas', 401);
     }
 
     // 2. Comparar contraseña
     const isMatch = await cryptoUtils.comparePassword(contrasena, user.contrasena);
     if (!isMatch) {
         logger.warn(`Intento de login fallido: Contraseña incorrecta para (${usuario})`);
-        return null;
+        throw new AppError('Credenciales incorrectas', 401);
     }
 
     // --- PROCESO DE MERGE DE PERMISOS (Súper eficiente) ---
@@ -51,7 +52,9 @@ const login = async (usuario, contrasena) => {
                     // Usamos un Set para evitar duplicados si el usuario tiene varios roles
                     permisosMap[recurso] = new Set();
                 }
-                acciones.forEach(accion => permisosMap[recurso].add(accion));
+                if (Array.isArray(acciones)) {
+                    acciones.forEach(accion => permisosMap[recurso].add(accion));
+                }
             });
         });
     }
