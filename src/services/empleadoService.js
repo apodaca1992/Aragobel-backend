@@ -36,18 +36,23 @@ const update = async (id, data) => {
     // 2. Check de Unicidad del Email (Solo si el email viene en el update)
     if (data.email) {
         const emailNormalizado = data.email.toLowerCase().trim();
-        
-        const existeOtro = await Empleado.findOne({
-            where: {
-                email: emailNormalizado,
-                id_empleado: { [Op.ne]: id } // Que no sea el mismo que estamos editando
-            }
-        });
 
-        if (existeOtro) {
-            const error = new AppError(`El email '${emailNormalizado}' ya pertenece a otro empleado.`);
-            error.statusCode = 400;
-            throw error;
+        // Si el nombre que llega es EXACTAMENTE igual al que ya tiene el rol,
+        // no necesitamos validar nada contra otros roles.
+        if (emailNormalizado !== empleado.email.toLowerCase().trim()) {
+        
+            const existeOtro = await Empleado.findOne({
+                where: {
+                    email: emailNormalizado,
+                    id_empleado: { [Op.ne]: id } // Que no sea el mismo que estamos editando
+                }
+            });
+
+            if (existeOtro) {
+                const error = new AppError(`El email '${emailNormalizado}' ya pertenece a otro empleado.`);
+                error.statusCode = 400;
+                throw error;
+            }
         }
         data.email = emailNormalizado;
     }

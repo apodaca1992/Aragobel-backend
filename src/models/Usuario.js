@@ -54,7 +54,63 @@ const Usuario = sequelize.define('Usuario', {
     timestamps: true // Para que busque createdAt/updatedAt,
 });
 
-// Definir la relación (Asociación)
-//Usuario.belongsTo(Empleado, { foreignKey: 'id_empleado' });
+// --- MÉTODO DE INSTANCIA PARA SINCRONIZAR CACHÉ PERMISOS Y ROLES---
+Usuario.prototype.actualizarCachePermisos = async function(transaction = null) {
+    // Importamos Rol aquí para evitar problemas de carga circular
+    const { Rol, UsuarioRol } = sequelize.models;
+
+    // 1. Obtener los roles activos del usuario
+    const vinculaciones = await UsuarioRol.findAll({
+        where: { id_usuario: this.id_usuario },
+        attributes: ['id_rol'],
+        transaction
+    });
+
+    const idsRoles = vinculaciones.map(v => v.id_rol);
+    
+    // 3. Si no tiene roles, limpiamos los campos y salimos
+    if (idsRoles.length === 0) {
+        return await this.update({ roles: [], permisos: {} }, { transaction });
+    }
+
+    // 4. Traemos los datos de los roles (solo los activos)
+    const rolesActivos = await Rol.findAll({
+        where: { 
+            id_rol: idsRoles,
+            activo: true 
+        },
+        transaction
+    });
+
+    const permisosMap = {};
+    const rolesList = [];
+
+    // 2. Unificar permisos y nombres de roles
+    rolesActivos.forEach(rol => {
+        rolesList.push(rol.nombre.toUpperCase());
+        
+        const config = rol.permisos || {};
+        Object.entries(config).forEach(([recurso, acciones]) => {
+            if (!permisosMap[recurso]) {
+                permisosMap[recurso] = new Set();
+            }
+            if (Array.isArray(acciones)) {
+                acciones.forEach(accion => permisosMap[recurso].add(accion));
+            }
+        });
+    });
+
+    // 3. Formatear para persistencia JSON
+    const permisosFinales = {};
+    Object.keys(permisosMap).forEach(recurso => {
+        permisosFinales[recurso] = Array.from(permisosMap[recurso]);
+    });
+
+    // 4. Guardar cambios en la instancia
+    return await this.update({
+        roles: rolesList,
+        permisos: permisosFinales
+    }, { transaction });
+};
 
 module.exports = Usuario;

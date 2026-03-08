@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/db');
+const { DB_CONFIG } = require('../config/constants');
 
 const Rol = sequelize.define('Rol', {
     id_rol: {
@@ -32,7 +33,37 @@ const Rol = sequelize.define('Rol', {
     }
 }, {
     tableName: 'roles',
-    timestamps: true
+    timestamps: true,
+    hooks: {
+        afterUpdate: async (rol, options) => {
+            if (rol.changed('permisos')) {
+                const { Usuario, UsuarioRol } = sequelize.models;
+                const vinculaciones = await UsuarioRol.findAll({
+                    where: { id_rol: rol.id_rol },
+                    attributes: ['id_usuario'],
+                    transaction: options.transaction
+                });
+
+                if (vinculaciones.length > 0) {
+                    console.log(`[HOOK] Actualizando ${vinculaciones.length} usuarios...`);
+
+                    // Definimos un tamaño de lote (chunk)
+                    const tamañoLote = DB_CONFIG.BATCH_SIZE; 
+                    
+                    for (let i = 0; i < vinculaciones.length; i += tamañoLote) {
+                        const lote = vinculaciones.slice(i, i + tamañoLote);
+                        
+                        await Promise.all(lote.map(async vinc => {
+                            const user = await Usuario.findByPk(vinc.id_usuario, { 
+                                transaction: options.transaction 
+                            });
+                            if (user) await user.actualizarCachePermisos(options.transaction);
+                        }));
+                    }
+                }
+            }
+        }
+    }
 });
 
 module.exports = Rol;

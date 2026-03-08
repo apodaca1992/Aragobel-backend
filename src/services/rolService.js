@@ -40,19 +40,24 @@ const update = async (id, data) => {
 
     if (data.nombre) {
         const nombreNormalizado = data.nombre.toUpperCase().trim();
-        
-        // SEGUNDO CHECK: ¿El nuevo nombre ya lo tiene OTRO rol?
-        const existeOtro = await Rol.findOne({
-            where: { 
-                nombre: nombreNormalizado,
-                id_rol: { [Op.ne]: id } // "Not Equal" al que estoy editando
-            }
-        });
 
-        if (existeOtro) {
-            const error = new AppError(`El nombre '${nombreNormalizado}' ya está en uso por otro rol.`);
-            error.statusCode = 400; // Bad Request
-            throw error;
+        // Si el nombre que llega es EXACTAMENTE igual al que ya tiene el rol,
+        // no necesitamos validar nada contra otros roles.
+        if (nombreNormalizado !== rol.nombre.toUpperCase()) {
+        
+            // SEGUNDO CHECK: ¿El nuevo nombre ya lo tiene OTRO rol?
+            const existeOtro = await Rol.findOne({
+                where: { 
+                    nombre: nombreNormalizado,
+                    id_rol: { [Op.ne]: id } // "Not Equal" al que estoy editando
+                }
+            });
+
+            if (existeOtro) {
+                const error = new AppError(`El nombre '${nombreNormalizado}' ya está en uso por otro rol.`);
+                error.statusCode = 400; // Bad Request
+                throw error;
+            }
         }
         
         // Si pasó la validación, actualizamos el dato normalizado

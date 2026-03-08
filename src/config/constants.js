@@ -37,11 +37,24 @@ const SUPER_ROLES = [
     ROLES.ROOT
 ];
 
+/**
+ * CONFIGURACIÓN DE INFRAESTRUCTURA
+ * Centralizamos los límites para SQL y el futuro Firestore.
+ */
+const DB_CONFIG = {
+    // 50 para SQL (evita saturar pool), 500 para Firestore (límite Google)
+    BATCH_SIZE: process.env.DB_TYPE === 'FIRESTORE' ? 500 : 50,
+    
+    // Tiempo de espera para procesos pesados (ms)
+    SYNC_TIMEOUT: 15000 
+};
+
 module.exports = {
     RECURSOS,
     ACCIONES,
     ROLES,
     SUPER_ROLES,
+    DB_CONFIG,
     // Helper para obtener arrays (útil para validaciones o el formulario)
     LISTA_RECURSOS: Object.values(RECURSOS),
     LISTA_ACCIONES: Object.values(ACCIONES)
