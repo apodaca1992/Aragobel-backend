@@ -13,15 +13,10 @@ const registrar = async (datos) => {
 };
 
 const login = async (usuario, contrasena) => {
-    // 1. Buscar usuario y sus roles en una sola consulta
-    // Senior Tip: Traemos solo los campos necesarios de los Roles (nombre y permisos JSON)
+    // Solo traemos los campos necesarios, incluyendo las nuevas columnas "caché"
     const user = await Usuario.findOne({ 
         where: { usuario },
-        include: [{
-            model: Rol,
-            attributes: ['nombre', 'permisos'],
-            through: { attributes: [] } // Excluimos campos de la tabla intermedia
-        }]
+        attributes: ['id_usuario', 'usuario', 'contrasena', 'permisos', 'roles'] 
     });
 
     if (!user) {
@@ -36,53 +31,24 @@ const login = async (usuario, contrasena) => {
         throw new AppError('Credenciales incorrectas', 401);
     }
 
-    // --- PROCESO DE MERGE DE PERMISOS (Súper eficiente) ---
-    const permisosMap = {};
-    const rolesList = [];
-
-    if (user.Rols && user.Rols.length > 0) {
-        user.Rols.forEach(rol => {
-            rolesList.push(rol.nombre.toUpperCase());
-
-            // rol.permisos ya es un objeto JS gracias a Sequelize DataTypes.JSON
-            const config = rol.permisos || {};
-
-            Object.entries(config).forEach(([recurso, acciones]) => {
-                if (!permisosMap[recurso]) {
-                    // Usamos un Set para evitar duplicados si el usuario tiene varios roles
-                    permisosMap[recurso] = new Set();
-                }
-                if (Array.isArray(acciones)) {
-                    acciones.forEach(accion => permisosMap[recurso].add(accion));
-                }
-            });
-        });
-    }
-
-    // Convertimos los Sets a Arrays para el JWT y el Frontend
-    const permisosFinales = {};
-    Object.keys(permisosMap).forEach(recurso => {
-        permisosFinales[recurso] = Array.from(permisosMap[recurso]);
-    });
-
     // 3. Generar Token con la nueva estructura
     const token = JwtUtils.generarToken({ 
         id: user.id_usuario, 
         usuario: user.usuario,
-        roles: rolesList,
-        permisos: permisosFinales 
+        roles: user.roles,
+        permisos: user.permisos 
     });
 
-    logger.info(`Login exitoso: ${user.usuario} con roles: ${rolesList.join(', ')}`);
+    logger.info(`Login exitoso: ${user.usuario} con roles: ${user.roles.join(', ')}`);
 
     return { 
         user: { 
             id: user.id_usuario, 
             usuario: user.usuario, 
-            roles: rolesList 
+            roles: user.roles 
         },
         token,
-        permisos: permisosFinales
+        permisos: user.permisos
     };
 };
 

@@ -10,7 +10,7 @@ const Puesto = require('./Puesto');
 const UsuarioRol = require('./UsuarioRol');
 
 
-// 1. Relación: Empleado <-> Tienda y Puesto
+/*// 1. Relación: Empleado <-> Tienda y Puesto
 Tienda.hasMany(Empleado, { foreignKey: 'id_tienda' });
 Empleado.belongsTo(Tienda, { foreignKey: 'id_tienda' });
 
@@ -31,7 +31,7 @@ Rol.belongsToMany(Usuario, {
     through: UsuarioRol, 
     foreignKey: 'id_rol', 
     otherKey: 'id_usuario' 
-});
+});*/
 
 syncSnapshots(Tienda, Empleado, 'id_tienda', {
     'nombre': 'tienda_nombre_snap'

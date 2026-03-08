@@ -29,6 +29,16 @@ const Usuario = sequelize.define('Usuario', {
         type: DataTypes.UUID,
         allowNull: false
     },
+    permisos: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: {}
+    },
+    roles: {
+        type: DataTypes.JSON,
+        allowNull: false,
+        defaultValue: []
+    },
     activo: {
         type: DataTypes.BOOLEAN,
         defaultValue: true // Por defecto, todo lo nuevo está activo

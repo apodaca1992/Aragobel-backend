@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS tipo_registros_checador (
 CREATE TABLE IF NOT EXISTS roles (
     id_rol VARCHAR(36) NOT NULL,
     nombre VARCHAR(100) NOT NULL,
-    descripcion VARCHAR(100) NOT NULL,,
+    descripcion VARCHAR(100) NOT NULL,
     permisos JSON NOT NULL DEFAULT (JSON_OBJECT()),
     activo BOOLEAN DEFAULT TRUE,
     PRIMARY KEY (id_rol)
@@ -56,6 +56,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
     contrasena VARCHAR(255) NOT NULL,
     email VARCHAR(100) NOT NULL,
     id_empleado VARCHAR(36) NOT NULL,
+    permisos JSON NOT NULL DEFAULT (JSON_OBJECT()),
+    roles JSON NOT NULL DEFAULT ('[]'),
     activo BOOLEAN DEFAULT TRUE,
     PRIMARY KEY (id_usuario),
     -- Relación con la tabla empleados
