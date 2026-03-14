@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const app = express();
 const globalErrorHandler = require('./middlewares/errorMiddleware');
 
@@ -9,6 +10,10 @@ const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
 const empleadoRoutes = require('./routes/empleadoRoutes');
 const rolRoutes = require('./routes/rolRoutes');
 
+// Configuración básica (Permite todo - Solo para desarrollo local)
+app.use(cors({
+  origin: 'http://localhost:4200' // La URL de tu app Ionic
+}));
 // Middlewares para entender JSON
 app.use(express.json());
 
