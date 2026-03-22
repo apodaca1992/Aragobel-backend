@@ -14,7 +14,7 @@ const Rol = sequelize.define('Rol', {
     },
     descripcion: {
         type: DataTypes.STRING(100),
-        allowNull: false
+        allowNull: true
     },
     permisos: {
         type: DataTypes.JSON,

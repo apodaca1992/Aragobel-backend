@@ -27,7 +27,7 @@ const Empleado = sequelize.define('Empleado', {
         type: DataTypes.UUID,
         allowNull: false
     },
-    tienda_nombre_snap: {
+    tienda_nombre_snap: { //no se necesita enviar desde el cliente
         type: DataTypes.STRING(50),
         allowNull: false
     },

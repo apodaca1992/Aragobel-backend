@@ -24,11 +24,12 @@ const empleadoSchema = Joi.object({
             'string.max': 'El nombre del empleado no puede exceder los 100 caracteres'
         }),
     email: Joi.string()
+        .max(100)
         .email() // <--- Valida formato: user@dominio.com
         .lowercase() // <--- Normaliza a minúsculas automáticamente
-        .required()
         .messages({
-            'string.email': 'El formato del correo electrónico no es válido'
+            'string.email': 'El formato del correo electrónico no es válido',
+            'string.max': 'El email del empleado no puede exceder los 100 caracteres'
         }),
     id_tienda: Joi.string()
         .guid({ version: 'uuidv4' }) 
