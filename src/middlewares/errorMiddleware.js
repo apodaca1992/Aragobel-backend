@@ -70,6 +70,20 @@ const handleValidationErrorJoi = err => {
     return new AppError(err.message, 400);
 };
 
+const handleFirestoreError = err => {
+    // Mapeamos los códigos de error de Firebase a mensajes legibles
+    const errors = {
+        'permission-denied': 'No tienes permisos suficientes para acceder a este recurso.',
+        'unavailable': 'El servicio de base de datos está temporalmente fuera de línea.',
+        'deadline-exceeded': 'La consulta tardó demasiado tiempo. Inténtalo de nuevo.',
+        'not-found': 'El recurso solicitado no existe en la base de datos.'
+    };
+
+    const message = errors[err.code] || 'Error inesperado en la base de datos.';
+    return new AppError(message, 400);
+};
+
+
 module.exports = (err, req, res, next) => {
     // 1. Mantenemos el objeto original pero aseguramos los defaults
     err.statusCode = err.statusCode || 500;
@@ -89,6 +103,12 @@ module.exports = (err, req, res, next) => {
         // 2. Errores de Base de Datos
         if (err.name === 'CastError') error = handleCastErrorDB(error);
         if (err.code === 11000) error = handleDuplicateFieldsDB(error);
+
+        // 2. NUEVO: Errores de Firestore
+        // El SDK de Firebase usa .code como un string para sus errores
+        if (typeof err.code === 'string' && err.stack?.includes('firestore')) {
+            error = handleFirestoreError(error);
+        }
         
         // 3. Seguridad
         if (err.name === 'JsonWebTokenError') error = handleJWTError();

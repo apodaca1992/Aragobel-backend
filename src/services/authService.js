@@ -1,4 +1,4 @@
-const { Usuario, Rol } = require('../models');
+const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
 const cryptoUtils = require('../utils/cryptoUtils');
 const JwtUtils = require('../utils/jwtUtils');
 const logger = require('../utils/logger');
@@ -13,11 +13,8 @@ const registrar = async (datos) => {
 };
 
 const login = async (usuario, contrasena) => {
-    // Solo traemos los campos necesarios, incluyendo las nuevas columnas "caché"
-    const user = await Usuario.findOne({ 
-        where: { usuario },
-        attributes: ['id_usuario', 'usuario', 'contrasena', 'permisos', 'roles'] 
-    });
+
+    const user = await Firestore.findOne('usuarios', 'usuario', usuario);
 
     if (!user) {
         logger.warn(`Intento de login fallido: Usuario no encontrado (${usuario})`);
