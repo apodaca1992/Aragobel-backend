@@ -4,7 +4,7 @@ const AppError = require('../utils/appError');
 
 exports.register = catchAsync(async (req, res, next) => {
     const nuevoUsuario = await authService.registrar(req.body);
-    const { contrasena, ...usuarioSinPassword } = nuevoUsuario.toJSON();
+    const { contrasena, ...usuarioSinPassword } = nuevoUsuario;
     return res.status(201).json({
         data: {
             user: usuarioSinPassword

@@ -6,7 +6,7 @@ const AppError = require('../utils/appError');
 
 const registrar = async (datos) => {
     const hash = await cryptoUtils.hashPassword(datos.contrasena);
-    return await Usuario.create({
+    return await Firestore.create('usuarios', {
         ...datos,
         contrasena: hash
     });
@@ -15,7 +15,6 @@ const registrar = async (datos) => {
 const login = async (usuario, contrasena) => {
 
     const user = await Firestore.findOne('usuarios', 'usuario', usuario);
-
     if (!user) {
         logger.warn(`Intento de login fallido: Usuario no encontrado (${usuario})`);
         throw new AppError('Credenciales incorrectas', 401);
@@ -30,7 +29,7 @@ const login = async (usuario, contrasena) => {
 
     // 3. Generar Token con la nueva estructura
     const token = JwtUtils.generarToken({ 
-        id: user.id_usuario, 
+        id: user.id, 
         usuario: user.usuario,
         roles: user.roles,
         permisos: user.permisos 
