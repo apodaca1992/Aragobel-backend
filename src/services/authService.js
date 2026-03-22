@@ -5,6 +5,20 @@ const logger = require('../utils/logger');
 const AppError = require('../utils/appError');
 
 const registrar = async (datos) => {
+    // 1. Verificar si el nombre de usuario ya existe
+    const usuarioExistente = await Firestore.findOne('usuarios', 'usuario', datos.usuario);
+    if (usuarioExistente) {
+        logger.warn(`El nombre de usuario ya está en uso (${datos.usuario})`);
+        throw new AppError('El nombre de usuario ya está en uso', 400);
+    }
+
+    // 2. Verificar si el email ya existe
+    const emailExistente = await Firestore.findOne('usuarios', 'email', datos.email);
+    if (emailExistente) {
+        logger.warn(`El correo electrónico ya está registrado (${datos.email})`);
+        throw new AppError('El correo electrónico ya está registrado', 400);
+    }
+
     const hash = await cryptoUtils.hashPassword(datos.contrasena);
     return await Firestore.create('usuarios', {
         ...datos,
