@@ -1,15 +1,16 @@
 const admin = require('firebase-admin');
+const path = require('path');
 
-// CRITICAL: Esta variable de entorno le dice al SDK que use el emulador local
-if (process.env.NODE_ENV !== 'production') {
-    process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
-    console.log('--- CONECTADO AL EMULADOR DE FIRESTORE ---');
-}
+// Usamos path.join para evitar errores de rutas entre Windows/Linux
+const serviceAccount = require(path.join(__dirname, '../serviceAccountKey.json'));
 
 admin.initializeApp({
-    projectId: 'demo-aragobel', // El ID que usaste en la inicialización
+    credential: admin.credential.cert(serviceAccount)
 });
 
 const db = admin.firestore();
+
+// Esto es para que no truene si mandas un campo opcional vacío
+db.settings({ ignoreUndefinedProperties: true });
 
 module.exports = { db, admin };

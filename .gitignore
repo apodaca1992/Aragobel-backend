@@ -30,3 +30,6 @@ logs
 # Sistema Operativo (Archivos basura de Linux/Mac/Win)
 .DS_Store
 Thumbs.db
+
+# Firebase credentials
+serviceAccountKey.json

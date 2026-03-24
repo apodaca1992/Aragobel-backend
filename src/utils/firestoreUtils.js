@@ -86,8 +86,8 @@ const Firestore = {
         
         await docRef.set({
             ...datos,
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
             activo: 1
         });
         return { id: docRef.id, ...datos };      
@@ -103,7 +103,7 @@ const Firestore = {
         const docRef = db.collection(coleccion).doc(id);
         const updateData = {
             ...datos,
-            updatedAt: new Date().toISOString()
+            updatedAt: new Date()
         };
         await docRef.update(updateData);
         return { id, ...updateData };
@@ -116,8 +116,8 @@ const Firestore = {
         const docRef = db.collection(coleccion).doc(id);
         const updateData = {
             activo: 0,
-            deletedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString()
+            deletedAt: new Date(),
+            updatedAt: new Date()
         };
         await docRef.update(updateData);
         return { id, ...updateData };        
