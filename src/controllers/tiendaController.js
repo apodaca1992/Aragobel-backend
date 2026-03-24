@@ -3,7 +3,23 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 
 exports.getTiendas = catchAsync(async (req, res, next) => {
-    const tiendas = await tiendaService.getAll();
+    // 1. Extraemos los parámetros que vienen de Postman (?limit=5&zona=Norte)
+    const { 
+        limit, 
+        lastDocId, 
+        orderBy, 
+        orderDir,
+        ...filtros // Todo lo demás que no sea paginación se va a filtros
+    } = req.query;
+    
+    // 2. Pasamos un objeto de opciones al servicio
+    const tiendas = await tiendaService.getAll({
+        filtros, 
+        limit, 
+        lastDocId, 
+        orderBy, 
+        orderDir
+    });
     return res.status(200).json({
         length: tiendas.length,
         data: tiendas
@@ -56,6 +72,6 @@ exports.deleteTienda = catchAsync(async (req, res, next) => {
     }
 
     return res.status(200).json({
-        message: 'Se elimino correctamente'
+        data: eliminado
     });
 });

@@ -1,5 +1,35 @@
 const { db } = require('../../config/firebase');
 
+/**
+ * Función auxiliar privada para convertir Timestamps de Firebase a ISO Strings
+ * de forma recursiva (funciona para objetos anidados como 'permisos')
+ */
+const formatData = (obj) => {
+    if (!obj || typeof obj !== 'object') return obj;
+
+    // 1. Si es un Timestamp de Firestore (tiene el método toDate)
+    if (typeof obj.toDate === 'function') {
+        return obj.toDate().toISOString();
+    }
+
+    // 2. Si es un objeto Date nativo de JS
+    if (obj instanceof Date) {
+        return obj.toISOString();
+    }
+
+    // 3. Si es un Array, procesamos cada elemento
+    if (Array.isArray(obj)) {
+        return obj.map(formatData);
+    }
+
+    // 4. Si es un objeto literal, procesamos sus llaves
+    const newObj = {};
+    for (const key in obj) {
+        newObj[key] = formatData(obj[key]);
+    }
+    return newObj;
+};
+
 const Firestore = {
 
     /**
@@ -9,18 +39,31 @@ const Firestore = {
      */
     findAll: async (coleccion, opciones = {}) => {
         const { 
-            filtros = {}, 
+            filtros = { activo: 1}, 
             orderBy = 'createdAt', 
             orderDir = 'desc', 
             limit = 10,
             lastDocId = null // El ID del último documento de la página anterior
         } = opciones;
 
-        let query = db.collection(coleccion).where('activo', '==', 1);
+        let query = db.collection(coleccion);
 
         // 1. Filtros
         Object.keys(filtros).forEach(key => {
-            query = query.where(key, '==', filtros[key]);
+
+            let valor = filtros[key];
+
+            // Si el valor es un string que parece un número, lo convertimos
+            // Ejemplo: "1" -> 1, "25.5" -> 25.5
+            if (typeof valor === 'string' && valor.trim() !== '' && !isNaN(valor)) {
+                valor = Number(valor);
+            }
+
+            // Si el valor es "true" o "false" (strings), convertirlos a booleanos
+            if (valor === 'true') valor = true;
+            if (valor === 'false') valor = false;
+
+            query = query.where(key, '==', valor);
         });
 
         // 2. Orden (Obligatorio para paginar)
@@ -41,7 +84,7 @@ const Firestore = {
 
         if (snapshot.empty) return [];
 
-        return snapshot.docs.map(doc => ({
+        return snapshot.docs.map(doc => formatData({
             id: doc.id,
             ...doc.data()
         }));
@@ -57,19 +100,19 @@ const Firestore = {
             .limit(1)
             .get();
 
-        return docs.length ? { id: docs[0].id, ...docs[0].data() } : null;    
+        return docs.length ? formatData({ id: docs[0].id, ...docs[0].data() }) : null;    
     },
 
     /**
      * (Opcional) Busca un documento directamente por su ID (UUID)
      */
-    findById: async (coleccion, id) => {
+    findByPk: async (coleccion, id) => {
         const doc = await db.collection(coleccion).doc(id).get();
         // Verificamos que el documento exista Y que esté activo
         if (!doc.exists || doc.data().activo === 0) {
             return null;
         }
-        return { id: doc.id, ...doc.data() };
+        return formatData({ id: doc.id, ...doc.data() });
     },
 
     /**
@@ -83,14 +126,17 @@ const Firestore = {
         const docRef = id 
             ? db.collection(coleccion).doc(id) 
             : db.collection(coleccion).doc();
-        
-        await docRef.set({
+
+        const ahora = new Date();
+        const documentoFinal = {
             ...datos,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: ahora,
+            updatedAt: ahora,
             activo: 1
-        });
-        return { id: docRef.id, ...datos };      
+        };
+        
+        await docRef.set(documentoFinal);
+        return formatData({ id: docRef.id, ...documentoFinal });      
     },
 
     /**
@@ -106,7 +152,7 @@ const Firestore = {
             updatedAt: new Date()
         };
         await docRef.update(updateData);
-        return { id, ...updateData };
+        return formatData({ id, ...updateData });
     },
     
     /**
@@ -120,7 +166,7 @@ const Firestore = {
             updatedAt: new Date()
         };
         await docRef.update(updateData);
-        return { id, ...updateData };        
+        return formatData({ id, ...updateData });        
     },
 };
 
