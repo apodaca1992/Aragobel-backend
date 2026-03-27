@@ -10,10 +10,32 @@ const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
 const empleadoRoutes = require('./routes/empleadoRoutes');
 const rolRoutes = require('./routes/rolRoutes');
 
+
+const whiteList = [
+    'http://localhost',          // Origen predeterminado de Capacitor en Android
+    'capacitor://localhost',     // Origen predeterminado de Capacitor en iOS
+    'http://localhost:8100',     // Para cuando corres 'ionic serve' en tu PC
+    'http://localhost:4200'      // Por si usas Angular puro para pruebas
+];
+
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Permitimos peticiones sin origen (como Postman o servidores locales)
+        // o si el origen está en nuestra lista blanca
+        if (!origin || whiteList.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            // Error de seguridad si alguien intenta entrar desde otro dominio
+            callback(new Error('No permitido por CORS'));
+        }
+    },
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true // Importante si manejas cookies o sesiones
+};
+
 // Configuración básica (Permite todo - Solo para desarrollo local)
-app.use(cors({
-  origin: 'http://localhost:4200' // La URL de tu app Ionic
-}));
+app.use(cors(corsOptions));
 // Middlewares para entender JSON
 app.use(express.json());
 
