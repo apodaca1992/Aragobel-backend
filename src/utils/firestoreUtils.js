@@ -38,16 +38,25 @@ const Firestore = {
      * @param {Object} opciones - { filtros, orderBy, orderDir, limit, lastDocId }
      */
     findAll: async (coleccion, opciones = {}) => {
+        // 1. Extraemos con nombres temporales para limpiar
         const { 
-            filtros = { activo: 1}, 
-            orderBy = 'createdAt', 
-            orderDir = 'desc', 
-            limit = 10,
-            lastDocId = null // El ID del último documento de la página anterior
+            filtros: fRaw, 
+            orderBy: oBy, 
+            orderDir: oDir, 
+            limit: lmt, 
+            lastDocId: lId 
         } = opciones;
 
-        let query = db.collection(coleccion);
+        // 2. Aplicamos la lógica de "Si no viene o está vacío, usa el default"
+        const filtros = (fRaw && Object.keys(fRaw).length > 0) ? fRaw : { activo: 1 };
+        const orderBy = oBy || 'createdAt';
+        const orderDir = oDir || 'desc';
+        const limit = lmt || 10;
+        const lastDocId = lId || null;
 
+        // CAMBIO CLAVE: 'coleccion' ahora puede ser "tiendas" o "usuarios/1/entregas"
+        let query = db.collection(coleccion);
+        console.log('[opciones]:', { filtros, orderBy, orderDir, limit, lastDocId });
         // 1. Filtros
         Object.keys(filtros).forEach(key => {
 
