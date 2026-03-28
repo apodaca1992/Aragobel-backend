@@ -1,16 +1,22 @@
 const admin = require('firebase-admin');
 const path = require('path');
+const serviceAccountPath = path.join(__dirname, 'serviceAccountKey.json');
+try {
+    // Al estar en la misma carpeta, usamos __dirname y especificamos .json
+    const serviceAccount = require(serviceAccountPath);
 
-// Usamos path.join para evitar errores de rutas entre Windows/Linux
-const serviceAccount = require(path.join(__dirname, '../serviceAccountKey.json'));
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount)
+    });
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
-});
+    console.log("✅ Firebase inicializado correctamente");
+} catch (error) {
+    console.error("❌ Error al cargar la llave de Firebase:", error.message);
+    console.error(error);
+    process.exit(1); // Esto hará que el log nos muestre el error exacto
+}
 
 const db = admin.firestore();
-
-// Esto es para que no truene si mandas un campo opcional vacío
 db.settings({ ignoreUndefinedProperties: true });
 
 module.exports = { db, admin };

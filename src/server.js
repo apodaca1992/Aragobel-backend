@@ -1,6 +1,6 @@
 require('dotenv').config();
 const app = require('./app');
-const sequelize = require('./config/db');
+//const sequelize = require('./config/db');
 const logger = require('./utils/logger');
 
 const PORT = process.env.PORT || 3000;
@@ -9,12 +9,12 @@ const ENV = process.env.NODE_ENV || 'development';
 async function main() {
     try {
         logger.info(`Iniciando servidor en modo: ${ENV}`);
-        // Autenticar la conexión a MariaDB (EntityManager check)
+        /*// Autenticar la conexión a MariaDB (EntityManager check)
         await sequelize.authenticate();
         logger.info('✅ Conexión a MariaDB establecida correctamente (ORM).');
 
         await sequelize.sync({ alter: false });
-        logger.info('Tablas y asociaciones configuradas correctamente.');
+        logger.info('Tablas y asociaciones configuradas correctamente.');*/
 
         const server = app.listen(PORT, () => {
             logger.info(`Servidor corriendo en puerto: ${PORT}`);

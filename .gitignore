@@ -32,4 +32,4 @@ logs
 Thumbs.db
 
 # Firebase credentials
-serviceAccountKey.json
+config/serviceAccountKey.json
