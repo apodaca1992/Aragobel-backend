@@ -1,4 +1,3 @@
-const { Tienda } = require('../models');
 const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
 
 const getAll = async (opciones = {}) => await Firestore.findAll('tiendas',opciones);

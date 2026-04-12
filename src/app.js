@@ -7,7 +7,6 @@ const globalErrorHandler = require('./middlewares/errorMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const tiendaRoutes = require('./routes/tiendaRoutes');
 const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
-const empleadoRoutes = require('./routes/empleadoRoutes');
 const rolRoutes = require('./routes/rolRoutes');
 
 
@@ -48,7 +47,6 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes); // Prefijo para login, registro, etc.
 app.use('/api/tiendas', tiendaRoutes);
 app.use('/api/entregas', entregaFeatureRoutes);
-app.use('/api/empleados', empleadoRoutes);
 app.use('/api/roles', rolRoutes);
 
 // ESTE DEBE SER EL ÚLTIMO MIDDLEWARE
