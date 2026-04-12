@@ -1,10 +1,20 @@
 const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
-
 const AppError = require('../utils/appError');
 
 const getAll = async (opciones = {}) => await Firestore.findAll('roles',opciones);
    
-const getById = async (id) => await Firestore.findByPk('roles',id);
+const getById = async (id) => {
+    const rolExistente = await Firestore.findByPk('roles',id);
+
+    if (!rolExistente) {
+        // Lanzamos un error de negocio claro
+        const error = new AppError(`El rol '${id}' no existe en el sistema.`);
+        error.statusCode = 400; // Bad Request
+        throw error;
+    }
+
+    return rolExistente;
+}
 
 const create = async (data) => {
     // 1. Normalización Manual (Mayúsculas y sin espacios)

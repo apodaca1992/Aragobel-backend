@@ -30,4 +30,8 @@ const rolSchema = Joi.object({
     })
 });
 
-module.exports = { rolSchema };
+// 2. Generar esquema para UPDATE dinámicamente
+// Tomamos el esquema de arriba y convertimos 'nombre' en opcional
+const updateRolSchema = rolSchema.fork(['nombre'], (schema) => schema.optional());
+
+module.exports = { rolSchema,updateRolSchema };
