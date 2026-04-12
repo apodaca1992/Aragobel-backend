@@ -6,23 +6,23 @@ const usuarioSchema = Joi.object({
         .max(100)
         .required()
         .messages({
-            'string.empty': 'El nombre del empleado es obligatorio',
-            'any.required': 'El nombre del empleado es un campo requerido',
-            'string.max': 'El nombre del empleado no puede exceder los 100 caracteres'
+            'string.empty': 'El nombre del usuario es obligatorio',
+            'any.required': 'El nombre del usuario es un campo requerido',
+            'string.max': 'El nombre del usuario no puede exceder los 100 caracteres'
         }),
     apellido_paterno: Joi.string()
         .max(100)
         .required()
         .messages({
-            'string.empty': 'El apellido paterno del empleado es obligatorio',
-            'any.required': 'El apellido paterno del empleado es un campo requerido',
-            'string.max': 'El apellido paterno del empleado no puede exceder los 100 caracteres'
+            'string.empty': 'El apellido paterno del usuario es obligatorio',
+            'any.required': 'El apellido paterno del usuario es un campo requerido',
+            'string.max': 'El apellido paterno del usuario no puede exceder los 100 caracteres'
         }),
     apellido_materno: Joi.string()
         .max(100)
         .messages({
-            'any.required': 'El nombre del empleado es un campo requerido',
-            'string.max': 'El nombre del empleado no puede exceder los 100 caracteres'
+            'any.required': 'El nombre del usuario es un campo requerido',
+            'string.max': 'El nombre del usuario no puede exceder los 100 caracteres'
         }),
     usuario: Joi.string()
         .max(100)
@@ -49,10 +49,8 @@ const usuarioSchema = Joi.object({
             'string.max': 'La contraseña no puede exceder los 100 caracteres'
         }),
     id_tienda: Joi.string()
-        .guid({ version: 'uuidv4' }) 
         .required()
         .messages({
-            'string.guid': 'El ID de la tienda proporcionado no tiene un formato UUID válido', // Error de formato
             'string.empty': 'El ID de la tienda no puede estar vacío',         // Error de string ""
             'any.required': 'El ID de la tienda es obligatorio'
     }),
