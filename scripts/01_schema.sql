@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS vehiculos (
 
 CREATE TABLE IF NOT EXISTS entregas (
     id_entrega INT NOT NULL AUTO_INCREMENT,
+    persona_recibe VARCHAR(100) NOT NULL, 
     folio VARCHAR(100) NOT NULL,
     id_repartidor INT NULL,
     id_vehiculo INT NULL,
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS entregas (
     fec_salidapedido DATETIME NULL,
     fec_entregapedido DATETIME NULL,
     id_tienda INT NOT NULL,
+    estatus INT NOT NULL DEFAULT 1, --1 = Pendiente (Solo cajero) 2 = En Ruta (Asignado a repartidor) 3 = Entregado (Finalizado)
     PRIMARY KEY (id_entrega),
     -- Relaciones (Llaves Foráneas)
     CONSTRAINT fk_entregas_repartidor FOREIGN KEY (id_repartidor) REFERENCES empleados(id_empleado),
