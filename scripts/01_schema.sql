@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS entregas (
     persona_recibe VARCHAR(100) NOT NULL, 
     folio VARCHAR(100) NOT NULL,
     id_repartidor INT NULL,
+    id_usuario_creador INT NOT NULL,
     id_vehiculo INT NULL,
     colonia VARCHAR(100) NOT NULL,
     fec_registropedido DATETIME NULL,
