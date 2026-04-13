@@ -53,7 +53,7 @@ const login = async (usuario, contrasena) => {
 
     return { 
         user: { 
-            id: user.id_usuario, 
+            id: user.id, 
             usuario: user.usuario, 
             roles: user.roles 
         },
