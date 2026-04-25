@@ -6,6 +6,7 @@ const globalErrorHandler = require('./middlewares/errorMiddleware');
 // Rutas (las crearemos en un momento)
 const authRoutes = require('./routes/authRoutes');
 const tiendaRoutes = require('./routes/tiendaRoutes');
+const entregaRoutes = require('./routes/entregaRoutes');
 const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
 const rolRoutes = require('./routes/rolRoutes');
 
@@ -46,6 +47,7 @@ app.get('/', (req, res) => {
 // Unir las rutas de las entidades
 app.use('/api/auth', authRoutes); // Prefijo para login, registro, etc.
 app.use('/api/tiendas', tiendaRoutes);
+app.use('/api/entregas', entregaRoutes);
 app.use('/api/entregas', entregaFeatureRoutes);
 app.use('/api/roles', rolRoutes);
 

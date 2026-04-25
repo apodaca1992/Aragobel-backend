@@ -55,6 +55,7 @@ const login = async (usuario, contrasena) => {
         user: { 
             id: user.id, 
             usuario: user.usuario, 
+            id_tienda: user.id_tienda, 
             roles: user.roles 
         },
         token,

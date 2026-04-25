@@ -1,0 +1,67 @@
+const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
+const AppError = require('../utils/appError');
+
+const getAll = async (opciones = {}) => await Firestore.findAll('entregas',opciones);
+   
+const getById = async (id) => {
+
+    const entregaExistente = await Firestore.findByPk('entregas',id);
+
+    if (!entregaExistente) {
+        // Lanzamos un error de negocio claro
+        const error = new AppError(`La entrega '${id}' no existe en el sistema.`);
+        error.statusCode = 400; // Bad Request
+        throw error;
+    }
+
+    return entregaExistente;
+}
+
+const create = async (data) => await Firestore.create('entregas',data);
+
+const update = async (id, data) => {
+    const entregaExistente = await Firestore.findByPk('entregas',id);
+    if (!entregaExistente) {
+        // Lanzamos un error de negocio claro
+        const error = new AppError(`La entrega '${id}' no existe en el sistema.`);
+        error.statusCode = 400; // Bad Request
+        throw error;
+    }
+
+    // --- LÓGICA AUTOMÁTICA PARA FECHA DE SALIDA ---
+    // Si el cliente envía estatus 2 (En camino) y la entrega no tenía fecha de salida previa
+    if (data.estatus === 2 && !entregaExistente.fec_salidapedido) {
+        data.fec_salidapedido = new Date(); // Estampa de tiempo oficial del servidor
+    }
+
+    // 2. ENTREGA (Estatus 3: Entregado)
+    if (data.estatus === 3 && !entregaExistente.fec_entregapedido) {
+        data.fec_entregapedido = new Date();
+    }
+
+    const resultadoUpdate = await Firestore.update('entregas',id,data);
+
+    return {
+        ...entregaExistente, // Trae id, activo, createdAt, etc.
+        ...resultadoUpdate  // Sobrescribe los campos cambiados y trae el nuevo updatedAt
+    };
+};
+
+const remove = async (id) => {
+    const entregaExistente = await Firestore.findByPk('entregas',id);
+    if (!entregaExistente) {
+        // Lanzamos un error de negocio claro
+        const error = new AppError(`La entrega '${id}' no existe en el sistema.`);
+        error.statusCode = 400; // Bad Request
+        throw error;
+    }
+
+    const resultadoSoftDelete= await Firestore.softDelete('entregas',id);
+
+    return {
+        ...entregaExistente, // Trae id, activo, createdAt, etc.
+        ...resultadoSoftDelete  // Sobrescribe los campos cambiados y trae el nuevo updatedAt
+    };
+};
+
+module.exports = { getAll, getById, create, update, remove };

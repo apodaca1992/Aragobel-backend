@@ -60,7 +60,18 @@ const Firestore = {
         // 1. Filtros
         Object.keys(filtros).forEach(key => {
 
-            let valor = filtros[key];
+            let valorRaw = filtros[key];
+            let operador = '=='; // Por defecto
+            let valor = valorRaw;
+
+            // Lógica para detectar el formato "op|val" (Ejemplo: "!=|3")
+            if (typeof valorRaw === 'string' && valorRaw.includes('|')) {
+                const partes = valorRaw.split('|');
+                if (partes.length === 2) {
+                    operador = partes[0];
+                    valor = partes[1];
+                }
+            }
 
             // Si el valor es un string que parece un número, lo convertimos
             // Ejemplo: "1" -> 1, "25.5" -> 25.5
@@ -72,7 +83,8 @@ const Firestore = {
             if (valor === 'true') valor = true;
             if (valor === 'false') valor = false;
 
-            query = query.where(key, '==', valor);
+            //console.log(`EJECUTANDO: query.where("${key}", "${operador}", ${valor})`);
+            query = query.where(key, operador, valor);
         });
 
         // 2. Orden (Obligatorio para paginar)
