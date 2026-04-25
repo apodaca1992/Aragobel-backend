@@ -7,6 +7,7 @@ const globalErrorHandler = require('./middlewares/errorMiddleware');
 const authRoutes = require('./routes/authRoutes');
 const tiendaRoutes = require('./routes/tiendaRoutes');
 const entregaRoutes = require('./routes/entregaRoutes');
+const vehiculoRoutes = require('./routes/vehiculoRoutes');
 const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
 const rolRoutes = require('./routes/rolRoutes');
 
@@ -48,6 +49,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes); // Prefijo para login, registro, etc.
 app.use('/api/tiendas', tiendaRoutes);
 app.use('/api/entregas', entregaRoutes);
+app.use('/api/vehiculos', vehiculoRoutes);
 app.use('/api/entregas', entregaFeatureRoutes);
 app.use('/api/roles', rolRoutes);
 
