@@ -27,13 +27,13 @@ class Authorization {
      */
     static hasPermission(user, recurso, accion) {
         if (this.isAdmin(user)) return true;
-        if (!user || !user.permissions) return false;
+        if (!user || !user.permisos) return false;
 
         if (!RECURSOS[recurso]) {
             return false;
         }
 
-        const userPermissions = user.permissions[recurso] || [];
+        const userPermissions = user.permisos[recurso] || [];
         return userPermissions.includes(accion);
     }
 }
