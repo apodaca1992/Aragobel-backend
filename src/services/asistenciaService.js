@@ -19,6 +19,10 @@ const getById = async (id) => {
 }
 
 const create = async (data) => {
+    // 1. Normalizar el tipo a mayúsculas de inmediato
+    if (data.tipo) {
+        data.tipo = data.tipo.toUpperCase(); // "entrada" -> "ENTRADA"
+    }
 
     // 1. Obtener tiempo oficial de Mazatlán
     const now = new Date();

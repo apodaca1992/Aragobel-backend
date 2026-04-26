@@ -31,7 +31,16 @@ const getById = async (id) => {
     return entregaExistente;
 }
 
-const create = async (data) => await Firestore.create('entregas',data);
+const create = async (data) => {
+    // 2. Lógica de Negocio: Si fecha_venta es 'TODAY' o no viene, inyectamos la fecha del servidor
+    // Esto garantiza que el cliente no tenga que calcularla
+    if (!data.fecha_venta || data.fecha_venta === 'TODAY') {
+        data.fecha_venta = new Date().toLocaleString("sv-SE", { 
+            timeZone: "America/Mazatlan" 
+        }).split(' ')[0]; 
+    }
+    return await Firestore.create('entregas',data);
+}
 
 const update = async (id, data) => {
     const entregaExistente = await Firestore.findByPk('entregas',id);
