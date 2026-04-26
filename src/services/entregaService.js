@@ -1,7 +1,21 @@
 const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
 const AppError = require('../utils/appError');
 
-const getAll = async (opciones = {}) => await Firestore.findAll('entregas',opciones);
+const getAll = async (opciones = {}) => {
+
+    // 1. Extraemos los filtros de las opciones
+    let { filtros = {} } = opciones;
+
+    // 2. Lógica de Negocio: Si fecha_venta es 'TODAY' o no viene, inyectamos la fecha del servidor
+    // Esto garantiza que el cliente no tenga que calcularla
+    if (!filtros.fecha_venta || filtros.fecha_venta === 'TODAY') {
+        filtros.fecha_venta = new Date().toLocaleString("sv-SE", { 
+            timeZone: "America/Mazatlan" 
+        }).split(' ')[0]; 
+    }
+
+    return await Firestore.findAll('entregas',{ ...opciones, filtros })
+};
    
 const getById = async (id) => {
 
