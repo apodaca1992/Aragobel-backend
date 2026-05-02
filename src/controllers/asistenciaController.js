@@ -1,6 +1,7 @@
 const asistenciaService = require('../services/asistenciaService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
+const logger = require('../utils/logger');
 
 exports.getAsistencias = catchAsync(async (req, res, next) => {
     // 1. Extraemos los parámetros que vienen de Postman (?limit=5&zona=Norte)
@@ -14,11 +15,11 @@ exports.getAsistencias = catchAsync(async (req, res, next) => {
     
     // 2. Pasamos un objeto de opciones al servicio
     const asistencias = await asistenciaService.getAll({
-        filtros, 
         limit, 
         lastDocId, 
         orderBy, 
-        orderDir
+        orderDir,
+        filtros: { ...filtros, id_empresa: req.user.id_empresa }
     });
     return res.status(200).json({
         length: asistencias.length,
@@ -27,7 +28,7 @@ exports.getAsistencias = catchAsync(async (req, res, next) => {
 });
 
 exports.getAsistenciaById = catchAsync(async (req, res, next) => {
-    const asistencia = await asistenciaService.getById(req.params.id);
+    const asistencia = await asistenciaService.getById(req.params.id, req.user);
 
     if (!asistencia) {
         logger.warn(`Asistencia no encontrada`, { id, user: req.user?.id });
@@ -42,14 +43,19 @@ exports.getAsistenciaById = catchAsync(async (req, res, next) => {
 exports.createAsistencia = catchAsync(async (req, res, next) => {
     const datosParaRegistro = {
         ...req.body,
-        id_usuario: req.user.id 
+        id_usuario: req.user.id,
+        id_empresa: req.user.id_empresa // Viene del token decodificado
     };
     const nuevaAsistencia = await asistenciaService.create(datosParaRegistro);
     return res.status(201).json(nuevaAsistencia);    
 });
 
 exports.updateAsistencia = catchAsync(async (req, res, next) => {
-    const actualizado = await asistenciaService.update(req.params.id, req.body);
+    const actualizado = await asistenciaService.update(req.params.id, {
+        ...req.body,
+        id_usuario: req.user.id,
+        id_empresa: req.user.id_empresa // Viene del token decodificado
+    }, req.user);
 
     if (!actualizado) {
         logger.warn(`Intento de actualización de la Asistencia fallido:`, { 
@@ -65,7 +71,7 @@ exports.updateAsistencia = catchAsync(async (req, res, next) => {
 });
 
 exports.deleteAsistencia = catchAsync(async (req, res, next) => {
-    const eliminado = await asistenciaService.remove(req.params.id);
+    const eliminado = await asistenciaService.remove(req.params.id, req.user);
 
     if (!eliminado) {
         logger.error(`Error crítico: Fallo al eliminar la Asistencia`, { 

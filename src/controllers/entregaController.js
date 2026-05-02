@@ -1,6 +1,7 @@
 const entregaService = require('../services/entregaService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
+const logger = require('../utils/logger');
 
 exports.getEntregas = catchAsync(async (req, res, next) => {
     // 1. Extraemos los parámetros que vienen de Postman (?limit=5&zona=Norte)
@@ -14,11 +15,11 @@ exports.getEntregas = catchAsync(async (req, res, next) => {
     
     // 2. Pasamos un objeto de opciones al servicio
     const entregas = await entregaService.getAll({
-        filtros, 
         limit, 
         lastDocId, 
         orderBy, 
-        orderDir
+        orderDir,
+        filtros: { ...filtros, id_empresa: req.user.id_empresa }
     });
     return res.status(200).json({
         length: entregas.length,
@@ -27,7 +28,7 @@ exports.getEntregas = catchAsync(async (req, res, next) => {
 });
 
 exports.getEntregaById = catchAsync(async (req, res, next) => {
-    const entrega = await entregaService.getById(req.params.id);
+    const entrega = await entregaService.getById(req.params.id, req.user);
 
     if (!entrega) {
         logger.warn(`Entrega no encontrada`, { id, user: req.user?.id });
@@ -40,12 +41,18 @@ exports.getEntregaById = catchAsync(async (req, res, next) => {
 });
 
 exports.createEntrega = catchAsync(async (req, res, next) => {
-    const nuevaEntrega = await entregaService.create(req.body);
+    const nuevaEntrega = await entregaService.create({
+        ...req.body,
+        id_empresa: req.user.id_empresa // Viene del token decodificado
+    });
     return res.status(201).json(nuevaEntrega);    
 });
 
 exports.updateEntrega = catchAsync(async (req, res, next) => {
-    const actualizado = await entregaService.update(req.params.id, req.body);
+    const actualizado = await entregaService.update(req.params.id, {
+        ...req.body,
+        id_empresa: req.user.id_empresa // Viene del token decodificado
+    }, req.user);
 
     if (!actualizado) {
         logger.warn(`Intento de actualización de la Entrega fallido:`, { 
@@ -61,7 +68,7 @@ exports.updateEntrega = catchAsync(async (req, res, next) => {
 });
 
 exports.deleteEntrega = catchAsync(async (req, res, next) => {
-    const eliminado = await entregaService.remove(req.params.id);
+    const eliminado = await entregaService.remove(req.params.id, req.user);
 
     if (!eliminado) {
         logger.error(`Error crítico: Fallo al eliminar la Entrega`, { 

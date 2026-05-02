@@ -1,10 +1,11 @@
 const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
 const { admin } = require('../../config/firebase');
 const AppError = require('../utils/appError');
+const logger = require('../utils/logger');
 
 const getAll = async (opciones = {}) => await Firestore.findAll('asistencias',opciones);
    
-const getById = async (id) => {
+const getById = async (id, user) => {
 
     const asistenciaExistente = await Firestore.findByPk('asistencias',id);
 
@@ -13,6 +14,12 @@ const getById = async (id) => {
         const error = new AppError(`La asistencia '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
         throw error;
+    }
+
+    // Validación de pertenencia
+    if (asistenciaExistente.id_empresa !== user.id_empresa) {
+        logger.warn(`Intento para acceso NO AUTORIZADO: Usuario ${user.id} intentó obtener la asistencia ${id}`);
+        throw new AppError('No tienes permiso para acceder a esta asistencia', 403);
     }
 
     return asistenciaExistente;
@@ -46,13 +53,19 @@ const create = async (data) => {
     return await Firestore.create('asistencias',data);
 }
 
-const update = async (id, data) => {
+const update = async (id, data, user) => {
     const asistenciaExistente = await Firestore.findByPk('asistencias',id);
     if (!asistenciaExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`La asistencia '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
         throw error;
+    }
+
+    // 2. Validar que la tienda le pertenezca a la empresa del usuario
+    if (asistenciaExistente.id_empresa !== user.id_empresa) {
+        logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar asistencia ${id}`);
+        throw new AppError('No tienes permiso para editar esta asistencia', 403);
     }
 
     const resultadoUpdate = await Firestore.update('asistencias',id,data);
@@ -63,7 +76,7 @@ const update = async (id, data) => {
     };
 };
 
-const remove = async (id) => {
+const remove = async (id, user) => {
     const asistenciaExistente = await Firestore.findByPk('asistencias',id);
     if (!asistenciaExistente) {
         // Lanzamos un error de negocio claro
@@ -71,6 +84,12 @@ const remove = async (id) => {
         error.statusCode = 400; // Bad Request
         throw error;
     }
+
+    // Validación de pertenencia
+        if (asistenciaExistente.id_empresa !== user.id_empresa) {
+            logger.warn(`Intento para eliminación NO AUTORIZADO: Usuario ${user.id} intentó borrar la asistencia ${id}`);
+            throw new AppError('No tienes permiso para borrar a esta asistencia', 403);
+        }
 
     const resultadoSoftDelete= await Firestore.softDelete('asistencias',id);
 

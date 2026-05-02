@@ -1,5 +1,6 @@
 const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
 const AppError = require('../utils/appError');
+const logger = require('../utils/logger');
 
 const getAll = async (opciones = {}) => {
 
@@ -17,7 +18,7 @@ const getAll = async (opciones = {}) => {
     return await Firestore.findAll('entregas',{ ...opciones, filtros })
 };
    
-const getById = async (id) => {
+const getById = async (id, user) => {
 
     const entregaExistente = await Firestore.findByPk('entregas',id);
 
@@ -26,6 +27,12 @@ const getById = async (id) => {
         const error = new AppError(`La entrega '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
         throw error;
+    }
+
+    // Validación de pertenencia
+    if (entregaExistente.id_empresa !== user.id_empresa) {
+        logger.warn(`Intento para acceso NO AUTORIZADO: Usuario ${user.id} intentó obtener la entrega ${id}`);
+        throw new AppError('No tienes permiso para acceder a esta entrega', 403);
     }
 
     return entregaExistente;
@@ -42,13 +49,19 @@ const create = async (data) => {
     return await Firestore.create('entregas',data);
 }
 
-const update = async (id, data) => {
+const update = async (id, data, user) => {
     const entregaExistente = await Firestore.findByPk('entregas',id);
     if (!entregaExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`La entrega '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
         throw error;
+    }
+
+    // 2. Validar que la entrega le pertenezca a la empresa del usuario
+    if (entregaExistente.id_empresa !== user.id_empresa) {
+        logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar entrega ${id}`);
+        throw new AppError('No tienes permiso para editar esta entrega', 403);
     }
 
     // --- LÓGICA AUTOMÁTICA PARA FECHA DE SALIDA ---
@@ -70,13 +83,19 @@ const update = async (id, data) => {
     };
 };
 
-const remove = async (id) => {
+const remove = async (id, user) => {
     const entregaExistente = await Firestore.findByPk('entregas',id);
     if (!entregaExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`La entrega '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
         throw error;
+    }
+
+    // Validación de pertenencia
+    if (entregaExistente.id_empresa !== user.id_empresa) {
+        logger.warn(`Intento para eliminación NO AUTORIZADO: Usuario ${user.id} intentó borrar la entrega ${id}`);
+        throw new AppError('No tienes permiso para borrar a esta entrega', 403);
     }
 
     const resultadoSoftDelete= await Firestore.softDelete('entregas',id);
