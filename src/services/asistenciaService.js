@@ -3,7 +3,20 @@ const { admin } = require('../../config/firebase');
 const AppError = require('../utils/appError');
 const logger = require('../utils/logger');
 
-const getAll = async (opciones = {}) => await Firestore.findAll('asistencias',opciones);
+const getAll = async (opciones = {}) => {
+    // 1. Extraemos los filtros de las opciones
+    let { filtros = {} } = opciones;
+
+    // 2. Lógica de Negocio: Si viene una fecha y es 'TODAY', inyectamos la fecha del servidor    
+    // Esto garantiza que el cliente no tenga que calcularla
+    if (filtros.fecha || filtros.fecha === 'TODAY') {
+        filtros.fecha = new Date().toLocaleString("sv-SE", { 
+            timeZone: "America/Mazatlan" 
+        }).split(' ')[0]; 
+    }
+
+    return await Firestore.findAll('asistencias',opciones);
+}
    
 const getById = async (id, user) => {
 

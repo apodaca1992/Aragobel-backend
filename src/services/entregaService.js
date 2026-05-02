@@ -7,9 +7,9 @@ const getAll = async (opciones = {}) => {
     // 1. Extraemos los filtros de las opciones
     let { filtros = {} } = opciones;
 
-    // 2. Lógica de Negocio: Si fecha_venta es 'TODAY' o no viene, inyectamos la fecha del servidor
+    // 2. Lógica de Negocio: Si viene una fecha_venta y es 'TODAY', inyectamos la fecha del servidor
     // Esto garantiza que el cliente no tenga que calcularla
-    if (!filtros.fecha_venta || filtros.fecha_venta === 'TODAY') {
+    if (filtros.fecha_venta || filtros.fecha_venta === 'TODAY') {
         filtros.fecha_venta = new Date().toLocaleString("sv-SE", { 
             timeZone: "America/Mazatlan" 
         }).split(' ')[0]; 
