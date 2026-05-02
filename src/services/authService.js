@@ -77,6 +77,7 @@ const login = async (usuario, contrasena) => {
             roles: user.roles 
         },
         empresa: {
+            id: empresa.id, 
             nombre: empresa.nombre,
             modulos: modulos_empresa // Aquí regresas las banderas para Ionic
         },
