@@ -3,7 +3,10 @@ const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 
 exports.register = catchAsync(async (req, res, next) => {
-    const nuevoUsuario = await authService.registrar(req.body);
+    const nuevoUsuario = await authService.registrar({
+        ...req.body,
+        id_empresa: req.user.id_empresa // Viene del token decodificado
+    });
     const { contrasena, ...usuarioSinPassword } = nuevoUsuario;
     return res.status(201).json({
         data: {
@@ -37,6 +40,7 @@ exports.login = catchAsync(async (req, res, next) => {
     return res.status(200).json({
         token: data.token, // Estructura explícita
         user: data.user,
-        permisos: data.permisos
+        permisos: data.permisos,
+        empresa: data.empresa
     });
 });

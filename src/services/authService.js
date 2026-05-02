@@ -41,12 +41,29 @@ const login = async (usuario, contrasena) => {
         throw new AppError('Credenciales incorrectas', 401);
     }
 
+    // --- NUEVA LÓGICA DE EMPRESA Y MÓDULOS ---
+    if (!user.id_empresa) {
+        throw new AppError('El usuario no tiene una empresa asignada', 403);
+    }
+
+    const empresa = await Firestore.findByPk('empresas', user.id_empresa);
+    if (!empresa || empresa.activo === 0) {
+        throw new AppError('Empresa no encontrada o inactiva', 403);
+    }
+
+    // Extraemos las banderas de módulos (asumiendo que en Firestore están como objeto)
+    // Ejemplo: modulos: { checador: true, entregas: false }
+    const modulos_empresa = empresa.modulos || {};
+    // -----------------------------------------
+
     // 3. Generar Token con la nueva estructura
     const token = JwtUtils.generarToken({ 
         id: user.id, 
         usuario: user.usuario,
+        id_empresa: user.id_empresa,
         roles: user.roles,
-        permisos: user.permisos 
+        permisos: user.permisos,
+        modulos_empresa: modulos_empresa
     });
 
     logger.info(`Login exitoso: ${user.usuario} con roles: ${user.roles.join(', ')}`);
@@ -56,7 +73,12 @@ const login = async (usuario, contrasena) => {
             id: user.id, 
             usuario: user.usuario, 
             id_tienda: user.id_tienda, 
+            id_empresa: user.id_empresa,
             roles: user.roles 
+        },
+        empresa: {
+            nombre: empresa.nombre,
+            modulos: modulos_empresa // Aquí regresas las banderas para Ionic
         },
         token,
         permisos: user.permisos
