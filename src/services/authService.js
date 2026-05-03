@@ -56,10 +56,16 @@ const login = async (usuario, contrasena) => {
     const modulos_empresa = empresa.modulos || {};
     // -----------------------------------------
 
+    // 3. DINAMISMO: Extraemos lo que NO queremos y guardamos el RESTO
+    // Sacamos 'contrasena' y 'permisos' del objeto original
+    // 'userData' contendrá todo lo demás (id, usuario, roles, email, foto, etc.)
+    const { contrasena: _pw, permisos: _pm, ...userData } = user;
+
     // 3. Generar Token con la nueva estructura
     const token = JwtUtils.generarToken({ 
         id: user.id, 
         usuario: user.usuario,
+        id_tienda: user.id_tienda,
         id_empresa: user.id_empresa,
         roles: user.roles,
         permisos: user.permisos,
@@ -69,13 +75,7 @@ const login = async (usuario, contrasena) => {
     logger.info(`Login exitoso: ${user.usuario} con roles: ${user.roles.join(', ')}`);
 
     return { 
-        user: { 
-            id: user.id, 
-            usuario: user.usuario, 
-            id_tienda: user.id_tienda, 
-            id_empresa: user.id_empresa,
-            roles: user.roles 
-        },
+        user: userData,
         empresa: {
             id: empresa.id, 
             nombre: empresa.nombre,
