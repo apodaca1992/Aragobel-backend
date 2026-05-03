@@ -49,6 +49,22 @@ const create = async (data) => {
     const localTime = now.toLocaleString("sv-SE", { timeZone: "America/Mazatlan" });
     const [fecha, hora] = localTime.split(' ');
 
+    // --- VALIDACIÓN DE DUPLICADOS ---
+    // Buscamos si ya existe una asistencia para este usuario, este día y este tipo
+    const registrosExistentes = await Firestore.findAll('asistencias', {
+        filtros: {
+            id_usuario: data.id_usuario,
+            fecha: fecha,
+            tipo: data.tipo.toUpperCase(),
+            activo: 1 // IMPORTANTE: Para que tu findAll no use el default
+        },
+        limit: 1
+    });
+
+    if (registrosExistentes.length > 0) {
+        throw new AppError(`Ya existe un registro de ${data.tipo} para hoy`, 400);
+    }
+
     // 2. Definir estatus (Tolerancia de 10 min: 08:10:00)
     const horaEntradaOficial = "08:00:00";
     
