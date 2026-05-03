@@ -2,6 +2,7 @@ const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto co
 const { admin } = require('../../config/firebase');
 const AppError = require('../utils/appError');
 const logger = require('../utils/logger');
+const geoUtils = require('../utils/geoUtils');
 
 const getAll = async (opciones = {}) => {
     // 1. Extraemos los filtros de las opciones
@@ -63,6 +64,28 @@ const create = async (data) => {
 
     if (registrosExistentes.length > 0) {
         throw new AppError(`Ya existe un registro de ${data.tipo} para hoy`, 400);
+    }
+
+    // --- 2. VALIDACIÓN DE GEOCERCA (NUEVA) ---
+    if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
+
+    const tienda = await Firestore.findByPk('tiendas', data.id_tienda);
+    if (!tienda) throw new AppError('La tienda no existe', 404);
+
+    // Extraemos coordenadas de la tienda (asumiendo que en Firestore son GeoPoint o tienen lat/lng)
+    const tiendaLat = tienda.ubicacion._latitude || tienda.ubicacion.lat;
+    const tiendaLng = tienda.ubicacion._longitude || tienda.ubicacion.lng;
+
+    // Coordenadas que envía el usuario desde el móvil
+    const userLat = parseFloat(data.ubicacion.lat);
+    const userLng = parseFloat(data.ubicacion.lng);
+
+    const distancia = geoUtils.calcularDistanciaMetros(userLat, userLng, tiendaLat, tiendaLng);
+    const RADIO_MAXIMO = 200; // 200 metros de tolerancia
+
+    if (distancia > RADIO_MAXIMO) {
+        logger.warn(`Intento de checada fuera de rango: Usuario a ${Math.round(distancia)} metros`);
+        throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
     // 2. Definir estatus (Tolerancia de 10 min: 08:10:00)
