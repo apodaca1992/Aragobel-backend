@@ -1,6 +1,7 @@
 const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
 const AppError = require('../utils/appError');
 const logger = require('../utils/logger');
+const { admin } = require('../../config/firebase');
 
 const getAll = async (opciones = {}) => await Firestore.findAll('tiendas',opciones);
    
@@ -24,7 +25,14 @@ const getById = async (id,user) => {
     return tiendaExistente;
 }
 
-const create = async (data) => await Firestore.create('tiendas',data);
+const create = async (data) => { 
+    // Convertimos la ubicación a GeoPoint nativo en la misma propiedad
+    data.ubicacion = new admin.firestore.GeoPoint(
+        parseFloat(data.ubicacion.lat), 
+        parseFloat(data.ubicacion.lng)
+    );
+    return await Firestore.create('tiendas',data);
+}
 
 const update = async (id, data, user) => {
     const tiendaExistente = await Firestore.findByPk('tiendas',id);
