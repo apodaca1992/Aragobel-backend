@@ -48,12 +48,13 @@ const usuarioSchema = Joi.object({
             'any.required': 'La contraseña es un campo requerido',
             'string.max': 'La contraseña no puede exceder los 100 caracteres'
         }),
-    id_tienda: Joi.string()
+    tiendas_asignadas: Joi.array()
+        .min(1) // Al menos debe tener una tienda
         .required()
         .messages({
-            'string.empty': 'El ID de la tienda no puede estar vacío',         // Error de string ""
-            'any.required': 'El ID de la tienda es obligatorio'
-    }),
+            'array.base': 'Tiendas_asignadas debe ser un arreglo',
+            'array.min': 'El usuario debe tener al menos una tienda'
+        }),
     permisos: Joi.object().pattern(
         Joi.string().valid(...LISTA_RECURSOS), 
         Joi.array().items(Joi.string().valid(...LISTA_ACCIONES))
