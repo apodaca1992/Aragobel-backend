@@ -87,12 +87,15 @@ exports.deleteAsistencia = catchAsync(async (req, res, next) => {
 });
 
 exports.getServerTime = catchAsync(async (req, res, next) => {
+    const { 
+        tz
+    } = req.query;
     // Obtenemos la fecha actual
     const now = new Date();
     
     // Generamos la fecha formateada para Mazatlán
     const localMazatlan = now.toLocaleString("sv-SE", { 
-        timeZone: "America/Mazatlan" 
+        timeZone: tz
     });
 
     return res.status(200).json({
@@ -101,7 +104,7 @@ exports.getServerTime = catchAsync(async (req, res, next) => {
             serverTime: now.getTime(), // Timestamp útil para cálculos en Ionic
             fecha: localMazatlan.split(' ')[0], // "2026-04-26"
             hora: localMazatlan.split(' ')[1],  // "12:30:45"
-            timezone: 'America/Mazatlan'
+            timezone: tz
         }
     });
 });
