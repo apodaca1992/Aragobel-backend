@@ -62,16 +62,32 @@ const Firestore = {
 
             let valorRaw = filtros[key];
             let operador = '=='; // Por defecto
-            let valor = valorRaw;
+            let campoReal = key; // El nombre del campo en Firestore
 
-            // Lógica para detectar el formato "op|val" (Ejemplo: "!=|3")
-            if (typeof valorRaw === 'string' && valorRaw.includes('|')) {
+            // --- LÓGICA DE SUFIJOS PARA RANGOS (Soporte para GET) ---
+            if (key.endsWith('_gte')) {
+                operador = '>=';
+                campoReal = key.replace('_gte', '');
+            } else if (key.endsWith('_lte')) {
+                operador = '<=';
+                campoReal = key.replace('_lte', '');
+            } else if (key.endsWith('_gt')) {
+                operador = '>';
+                campoReal = key.replace('_gt', '');
+            } else if (key.endsWith('_lt')) {
+                operador = '<';
+                campoReal = key.replace('_lt', '');
+            } 
+            // Lógica original del pipe "op|val"
+            else if (typeof valorRaw === 'string' && valorRaw.includes('|')) {
                 const partes = valorRaw.split('|');
                 if (partes.length === 2) {
                     operador = partes[0];
-                    valor = partes[1];
+                    valorRaw = partes[1];
                 }
             }
+
+            let valor = valorRaw;
 
             // Si el valor es un string que parece un número, lo convertimos
             // Ejemplo: "1" -> 1, "25.5" -> 25.5
@@ -83,8 +99,8 @@ const Firestore = {
             if (valor === 'true') valor = true;
             if (valor === 'false') valor = false;
 
-            //console.log(`EJECUTANDO: query.where("${key}", "${operador}", ${valor})`);
-            query = query.where(key, operador, valor);
+            console.log(`EJECUTANDO: query.where("${campoReal}", "${operador}", ${valor})`);
+            query = query.where(campoReal, operador, valor);
         });
 
         // 2. Orden (Obligatorio para paginar)
