@@ -92,7 +92,9 @@ const Firestore = {
             // Si el valor es un string que parece un número, lo convertimos
             // Ejemplo: "1" -> 1, "25.5" -> 25.5
             if (typeof valor === 'string' && valor.trim() !== '' && !isNaN(valor)) {
-                valor = Number(valor);
+                if (campoReal !== 'folio') { 
+                    valor = Number(valor);
+                }
             }
 
             // Si el valor es "true" o "false" (strings), convertirlos a booleanos

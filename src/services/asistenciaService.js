@@ -10,9 +10,22 @@ const getAll = async (opciones = {}) => {
 
     // 2. Lógica de Negocio: Si viene una fecha y es 'TODAY', inyectamos la fecha del servidor    
     // Esto garantiza que el cliente no tenga que calcularla
-    if (filtros.fecha || filtros.fecha === 'TODAY') {
+    if (typeof filtros.fecha === 'string' && filtros.fecha.startsWith('TODAY')) {
+        let timeZone = "America/Mazatlan"; // Default por seguridad
+
+        // 2. Intentamos extraer el ID de la tienda después del '|'
+        const partes = filtros.fecha.split('|'); // ['TODAY', 'wEKDul8fyZuLeOKBbVSu']
+        const idTiendaDesdeFiltro = partes[1];
+
+        if (idTiendaDesdeFiltro) {
+            const tienda = await Firestore.findByPk('tiendas', idTiendaDesdeFiltro);
+            if (tienda && tienda.configuracion_asistencia?.time_zone) {
+                timeZone = tienda.configuracion_asistencia.time_zone;
+            }
+        }
+
         filtros.fecha = new Date().toLocaleString("sv-SE", { 
-            timeZone: "America/Mazatlan" 
+            timeZone: timeZone 
         }).split(' ')[0]; 
     }
 
@@ -45,9 +58,15 @@ const create = async (data) => {
         data.tipo = data.tipo.toUpperCase(); // "entrada" -> "ENTRADA"
     }
 
+    // --- 2. VALIDACIÓN DE GEOCERCA (NUEVA) ---
+    if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
+
+    const tienda = await Firestore.findByPk('tiendas', data.id_tienda);
+    if (!tienda) throw new AppError('La tienda no existe', 404);
+
     // 1. Obtener tiempo oficial de Mazatlán
     const now = new Date();
-    const localTime = now.toLocaleString("sv-SE", { timeZone: "America/Mazatlan" });
+    const localTime = now.toLocaleString("sv-SE", { timeZone: tienda.configuracion_asistencia.time_zone });
     const [fecha, hora] = localTime.split(' ');
 
     // --- VALIDACIÓN DE DUPLICADOS ---
@@ -55,6 +74,7 @@ const create = async (data) => {
     const registrosExistentes = await Firestore.findAll('asistencias', {
         filtros: {
             id_usuario: data.id_usuario,
+            id_tienda: data.id_tienda,
             fecha: fecha,
             tipo: data.tipo.toUpperCase(),
             activo: 1 // IMPORTANTE: Para que tu findAll no use el default
@@ -64,13 +84,7 @@ const create = async (data) => {
 
     if (registrosExistentes.length > 0) {
         throw new AppError(`Ya existe un registro de ${data.tipo} para hoy`, 400);
-    }
-
-    // --- 2. VALIDACIÓN DE GEOCERCA (NUEVA) ---
-    if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
-
-    const tienda = await Firestore.findByPk('tiendas', data.id_tienda);
-    if (!tienda) throw new AppError('La tienda no existe', 404);
+    }    
 
     // Extraemos coordenadas de la tienda (asumiendo que en Firestore son GeoPoint o tienen lat/lng)
     const tiendaLat = tienda.ubicacion._latitude || tienda.ubicacion.lat;
@@ -88,14 +102,22 @@ const create = async (data) => {
         throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
-    // 2. Definir estatus (Tolerancia de 10 min: 08:10:00)
-    const horaEntradaOficial = "08:00:00";
-    
+    // --- 3. LÓGICA ESPECÍFICA PARA ENTRADA (Snapshot de Configuración) ---
+    if (data.tipo === 'ENTRADA') {
+        const usuario = await Firestore.findByPk('usuarios', data.id_usuario);
+        if (!usuario) throw new AppError('Usuario no encontrado', 404);
+
+        // Buscar la configuración de la tienda asignada al usuario
+        const tiendaConfig = usuario.tiendas_asignadas?.find(t => t.id_tienda === data.id_tienda);
+        
+        // Inyectamos la meta del día (snapshot)
+        data.jornada_efectiva = tiendaConfig?.jornada_efectiva ?? 9.5;
+        data.tiempo_comida_max = tiendaConfig?.tiempo_comida_max ?? 1.5;
+    }
+
     // Inyectamos directamente en el objeto 'data'
     data.fecha = fecha;
-    data.hora = hora;
-    data.estatus = (data.tipo === 'ENTRADA' && hora > horaEntradaOficial) ? "RETARDO" : "A_TIEMPO";
-    
+    data.hora = hora;    
     // Convertimos la ubicación a GeoPoint nativo en la misma propiedad
     data.ubicacion = new admin.firestore.GeoPoint(
         parseFloat(data.ubicacion.lat), 

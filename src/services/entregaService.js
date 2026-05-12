@@ -7,11 +7,24 @@ const getAll = async (opciones = {}) => {
     // 1. Extraemos los filtros de las opciones
     let { filtros = {} } = opciones;
 
-    // 2. Lógica de Negocio: Si viene una fecha_venta y es 'TODAY', inyectamos la fecha del servidor
+    // 2. Lógica de Negocio: Si viene una fecha y es 'TODAY', inyectamos la fecha del servidor    
     // Esto garantiza que el cliente no tenga que calcularla
-    if (filtros.fecha_venta || filtros.fecha_venta === 'TODAY') {
+    if (typeof filtros.fecha_venta === 'string' && filtros.fecha_venta.startsWith('TODAY')) {
+        let timeZone = "America/Mazatlan"; // Default por seguridad
+
+        // 2. Intentamos extraer el ID de la tienda después del '|'
+        const partes = filtros.fecha_venta.split('|'); // ['TODAY', 'wEKDul8fyZuLeOKBbVSu']
+        const idTiendaDesdeFiltro = partes[1];
+
+        if (idTiendaDesdeFiltro) {
+            const tienda = await Firestore.findByPk('tiendas', idTiendaDesdeFiltro);
+            if (tienda && tienda.configuracion_asistencia?.time_zone) {
+                timeZone = tienda.configuracion_asistencia.time_zone;
+            }
+        }
+
         filtros.fecha_venta = new Date().toLocaleString("sv-SE", { 
-            timeZone: "America/Mazatlan" 
+            timeZone: timeZone 
         }).split(' ')[0]; 
     }
 
@@ -41,11 +54,34 @@ const getById = async (id, user) => {
 const create = async (data) => {
     // 2. Lógica de Negocio: Si fecha_venta es 'TODAY' o no viene, inyectamos la fecha del servidor
     // Esto garantiza que el cliente no tenga que calcularla
-    if (!data.fecha_venta || data.fecha_venta === 'TODAY') {
+    if (typeof data.fecha_venta === 'string' && data.fecha_venta.startsWith('TODAY')) {
+        // --- 2. VALIDACIÓN DE GEOCERCA (NUEVA) ---
+        if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
+
+        const tienda = await Firestore.findByPk('tiendas', data.id_tienda);
+        if (!tienda) throw new AppError('La tienda no existe', 404);
+
         data.fecha_venta = new Date().toLocaleString("sv-SE", { 
-            timeZone: "America/Mazatlan" 
+            timeZone: tienda.configuracion_asistencia.time_zone 
         }).split(' ')[0]; 
     }
+
+    // --- VALIDACIÓN DE DUPLICADOS ---
+    // Buscamos si ya existe una asistencia para este usuario, este día y este tipo
+    const registrosExistentes = await Firestore.findAll('entregas', {
+        filtros: {
+            id_tienda: data.id_tienda,
+            fecha_venta: data.fecha_venta,
+            folio: data.folio,
+            activo: 1 // IMPORTANTE: Para que tu findAll no use el default
+        },
+        limit: 1
+    });
+    console.log(registrosExistentes)
+    if (registrosExistentes.length > 0) {
+        throw new AppError(`Ya existe un registro de con folio ${data.folio} para hoy`, 400);
+    }  
+
     return await Firestore.create('entregas',data);
 }
 
