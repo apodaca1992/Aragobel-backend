@@ -1,5 +1,5 @@
 const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto completo
-const { admin } = require('../../config/firebase');
+const { db, admin } = require('../../config/firebase');
 const AppError = require('../utils/appError');
 const logger = require('../utils/logger');
 const geoUtils = require('../utils/geoUtils');
@@ -53,10 +53,8 @@ const getById = async (id, user) => {
 }
 
 const create = async (data) => {
-    // 1. Normalizar el tipo a mayúsculas de inmediato
-    if (data.tipo) {
-        data.tipo = data.tipo.toUpperCase(); // "entrada" -> "ENTRADA"
-    }
+    if (!data.tipo) throw new AppError('El tipo de checada es obligatorio', 400);
+    const tipoUpper = data.tipo.toUpperCase();
 
     // --- 2. VALIDACIÓN DE GEOCERCA (NUEVA) ---
     if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
@@ -65,26 +63,22 @@ const create = async (data) => {
     if (!tienda) throw new AppError('La tienda no existe', 404);
 
     // 1. Obtener tiempo oficial de Mazatlán
-    const now = new Date();
-    const localTime = now.toLocaleString("sv-SE", { timeZone: tienda.configuracion_asistencia.time_zone });
+    const timeZone = tienda.configuracion_asistencia?.time_zone || "America/Mazatlan";
+    const localTime = new Date().toLocaleString("sv-SE", { timeZone });
     const [fecha, hora] = localTime.split(' ');
 
-    // --- VALIDACIÓN DE DUPLICADOS ---
-    // Buscamos si ya existe una asistencia para este usuario, este día y este tipo
-    const registrosExistentes = await Firestore.findAll('asistencias', {
-        filtros: {
-            id_usuario: data.id_usuario,
-            id_tienda: data.id_tienda,
-            fecha: fecha,
-            tipo: data.tipo.toUpperCase(),
-            activo: 1 // IMPORTANTE: Para que tu findAll no use el default
-        },
-        limit: 1
-    });
+    // 2. Definir ID ÚNICO por día y usuario
+    const docId = `${data.id_usuario}_${fecha}_${data.id_tienda}`;
+    const docRef = db.collection('asistencias').doc(docId);
 
-    if (registrosExistentes.length > 0) {
-        throw new AppError(`Ya existe un registro de ${data.tipo} para hoy`, 400);
-    }    
+    // --- VALIDACIÓN DE DUPLICADOS ---
+    const docSnap = await docRef.get();
+    if (docSnap.exists) {
+        const jornada = docSnap.data();
+        if (jornada.eventos && jornada.eventos[tipoUpper]) {
+            throw new AppError(`Ya existe un registro de ${tipoUpper} para hoy`, 400);
+        }
+    }
 
     // Extraemos coordenadas de la tienda (asumiendo que en Firestore son GeoPoint o tienen lat/lng)
     const tiendaLat = tienda.ubicacion._latitude || tienda.ubicacion.lat;
@@ -102,8 +96,29 @@ const create = async (data) => {
         throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
+    // 5. Preparar objeto de actualización (Dot Notation para no borrar otros eventos)
+    const updateData = {
+        id_usuario: data.id_usuario,
+        nombre_usuario: data.nombre_usuario,
+        fecha: fecha,
+        id_tienda: data.id_tienda,
+        id_empresa: data.id_empresa,
+        activo: 1,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Usamos el bracket notation para que la llave sea dinámica (ENTRADA, SALIDA, etc)
+    // Pero la enviamos como un objeto anidado real
+    updateData['eventos'] = {
+        [tipoUpper]: {
+            hora: hora,
+            ubicacion: new admin.firestore.GeoPoint(userLat, userLng),
+            timestamp: admin.firestore.FieldValue.serverTimestamp()
+        }
+    };
+
     // --- 3. LÓGICA ESPECÍFICA PARA ENTRADA (Snapshot de Configuración) ---
-    if (data.tipo === 'ENTRADA') {
+    if (tipoUpper === 'ENTRADA') {
         const usuario = await Firestore.findByPk('usuarios', data.id_usuario);
         if (!usuario) throw new AppError('Usuario no encontrado', 404);
 
@@ -111,20 +126,15 @@ const create = async (data) => {
         const tiendaConfig = usuario.tiendas_asignadas?.find(t => t.id_tienda === data.id_tienda);
         
         // Inyectamos la meta del día (snapshot)
-        data.jornada_efectiva = tiendaConfig?.jornada_efectiva ?? 9.5;
-        data.tiempo_comida_max = tiendaConfig?.tiempo_comida_max ?? 1.5;
+        updateData.createdAt = admin.firestore.FieldValue.serverTimestamp();
+        updateData.jornada_efectiva = tiendaConfig?.jornada_efectiva ?? 9.5;
+        updateData.tiempo_comida_max = tiendaConfig?.tiempo_comida_max ?? 1.5;
     }
 
-    // Inyectamos directamente en el objeto 'data'
-    data.fecha = fecha;
-    data.hora = hora;    
-    // Convertimos la ubicación a GeoPoint nativo en la misma propiedad
-    data.ubicacion = new admin.firestore.GeoPoint(
-        parseFloat(data.ubicacion.lat), 
-        parseFloat(data.ubicacion.lng)
-    );
+    // 6. Guardar con MERGE (Crea si no existe, actualiza si sí)
+    await docRef.set(updateData, { merge: true });
 
-    return await Firestore.create('asistencias',data);
+    return { id: docId, ...updateData };
 }
 
 const update = async (id, data, user) => {
@@ -142,12 +152,30 @@ const update = async (id, data, user) => {
         throw new AppError('No tienes permiso para editar esta asistencia', 403);
     }
 
-    const resultadoUpdate = await Firestore.update('asistencias',id,data);
+    // Si data trae "eventos", hay que tener cuidado de no sobrescribir todo el mapa
+    // Una opción es normalizar a dot notation si detectas el objeto eventos
+    let dataFinal = { ...data };
+    if (data.eventos) {
+        // Recorremos los tipos de eventos (ENTRADA, SALIDA, etc.)
+        Object.keys(data.eventos).forEach(tipo => {
+            const camposEvento = data.eventos[tipo]; // { hora: "...", comentario: "..." }
+            
+            // Recorremos cada campo dentro del evento para crear la ruta completa
+            Object.keys(camposEvento).forEach(campo => {
+                const rutaPunto = `eventos.${tipo}.${campo}`;
+                dataFinal[rutaPunto] = camposEvento[campo];
+            });
+        });
+        
+        // Eliminamos el objeto 'eventos' original para que no sobrescriba todo
+        delete dataFinal.eventos;
+    }
 
-    return {
-        ...asistenciaExistente, // Trae id, activo, createdAt, etc.
-        ...resultadoUpdate  // Sobrescribe los campos cambiados y trae el nuevo updatedAt
-    };
+    await Firestore.update('asistencias', id, dataFinal);
+    // 3. LA CLAVE: Volvemos a consultar el documento de la DB 
+    // para obtener la estructura final ya procesada por Firestore
+    const asistenciaActualizada = await Firestore.findByPk('asistencias', id);
+    return asistenciaActualizada;
 };
 
 const remove = async (id, user) => {
