@@ -4,6 +4,7 @@ const asistenciaController = require('../controllers/asistenciaController');
 const { validarToken, checkPermission } = require('../middlewares/authMiddleware');
 
 // GET /api/Asistencias
+router.get('/generarReporte', validarToken, checkPermission(), asistenciaController.generarReporte); 
 router.get('/time', validarToken, asistenciaController.getServerTime);                           //sincronizar el reloj de la App 
 router.get('/', validarToken, checkPermission(), asistenciaController.getAsistencias);           // Listar todas
 router.get('/:id', validarToken, checkPermission(), asistenciaController.getAsistenciaById);     // Ver una

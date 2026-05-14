@@ -201,4 +201,103 @@ const remove = async (id, user) => {
     };
 };
 
-module.exports = { getAll, getById, create, update, remove };
+const getReporteHoras = async (opciones = {}) => {
+    const asistencias = await Firestore.findAll('asistencias', opciones);
+    const reporteMap = {};
+
+    // 1. Necesitamos la fecha/hora actual del servidor para cálculos "en curso"
+    const now = new Date();
+
+    for (const asist of asistencias) {
+        const userId = asist.id_usuario;
+        const jornadaMeta = asist.jornada_efectiva || 9.5;
+        const comidaDefault = asist.tiempo_comida_max || 1.5;
+        
+        if (!reporteMap[userId]) {
+            reporteMap[userId] = {
+                nombre: asist.nombre_usuario,
+                total_horas: 0,
+                extras: 0,
+                faltantes: 0,
+                asistencias: []
+            };
+        }
+
+        const eventos = asist.eventos || {};
+        let horasEfectivas = 0;
+        let tiempoComida = 0;
+        let entrada = "N/A";
+        let salida = "N/A";
+        let estatusDia = "INCOMPLETO";
+
+        // --- CÁLCULO DE ESTANCIA (REAL O PARCIAL) ---
+        if (eventos.ENTRADA) {
+            entrada = eventos.ENTRADA.hora;
+            const hEntrada = parseHoraADecimal(entrada);
+            let hReferenciaSalida;
+
+            if (eventos.SALIDA) {
+                // Caso A: Ya salió (Cálculo normal)
+                salida = eventos.SALIDA.hora;
+                hReferenciaSalida = parseHoraADecimal(salida);
+                estatusDia = "TERMINADO";
+            } else {
+                // Caso B: NO ha salido. Usamos la hora actual
+                // Obtenemos la hora actual en la zona horaria de la tienda/asistencia
+                // Si no tenemos la tienda a mano, usamos la hora del servidor normalizada
+                const horaActualLocal = now.toLocaleTimeString("sv-SE", { hour12: false });
+                hReferenciaSalida = parseHoraADecimal(horaActualLocal);
+                salida = "EN CURSO...";
+                estatusDia = "TRABAJANDO";
+            }
+
+            let estanciaTotal = hReferenciaSalida - hEntrada;
+
+            // --- LÓGICA DE COMIDA ---
+            if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
+                tiempoComida = parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora);
+            } else if (eventos.COMIDA_INICIO && !eventos.COMIDA_FIN) {
+                // Si está comiendo o no cerró comida, descontamos el default por precaución
+                tiempoComida = comidaDefault;
+            }
+
+            horasEfectivas = Math.max(0, estanciaTotal - tiempoComida);
+        }
+
+        // Diferencia contra la jornada
+        let diferencia = horasEfectivas - jornadaMeta;
+
+        reporteMap[userId].total_horas += horasEfectivas;
+        
+        if (horasEfectivas > 0) {
+            if (diferencia > 0) reporteMap[userId].extras += diferencia;
+            else if (diferencia < 0) reporteMap[userId].faltantes += Math.abs(diferencia);
+        } else {
+            reporteMap[userId].faltantes += jornadaMeta;
+        }
+
+        reporteMap[userId].asistencias.push({
+            fecha: asist.fecha,
+            entrada,
+            salida,
+            total_efectivo: Number(horasEfectivas.toFixed(2)),
+            jornada_asignada: jornadaMeta,
+            estatus: estatusDia
+        });
+    }
+
+    return Object.values(reporteMap).map(emp => ({
+        ...emp,
+        total_horas: Number(emp.total_horas.toFixed(2)),
+        extras: Number(emp.extras.toFixed(2)),
+        faltantes: Number(emp.faltantes.toFixed(2))
+    }));
+};
+
+// Función auxiliar para convertir "08:30:00" -> 8.5
+const parseHoraADecimal = (horaStr) => {
+    const [hrs, mins, secs] = horaStr.split(':').map(Number);
+    return hrs + (mins / 60) + (secs / 3600);
+};
+
+module.exports = { getAll, getById, create, update, remove, getReporteHoras };

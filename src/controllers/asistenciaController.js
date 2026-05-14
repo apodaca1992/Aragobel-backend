@@ -108,3 +108,24 @@ exports.getServerTime = catchAsync(async (req, res, next) => {
         }
     });
 });
+
+exports.generarReporte = catchAsync(async (req, res, next) => {
+    const { fecha_inicio, fecha_fin, id_tienda } = req.query;
+
+    const empleados = await asistenciaService.getReporteHoras({
+        filtros: {
+            id_tienda: id_tienda,
+            fecha_gte: fecha_inicio, // "2026-05-11"
+            fecha_lte: fecha_fin,    // "2026-05-17"
+            id_empresa: req.user.id_empresa,
+            activo: 1,
+        },
+        orderBy: 'fecha',
+        orderDir: 'asc'
+    });
+
+    res.status(200).json({
+        periodo: `${fecha_inicio} al ${fecha_fin}`,
+        empleados
+    });
+});
