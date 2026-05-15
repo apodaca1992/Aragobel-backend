@@ -110,16 +110,25 @@ exports.getServerTime = catchAsync(async (req, res, next) => {
 });
 
 exports.generarReporte = catchAsync(async (req, res, next) => {
-    const { fecha_inicio, fecha_fin, id_tienda } = req.query;
+    const { fecha_inicio, fecha_fin, id_tienda, id_usuario } = req.query;
+
+    // 1. Construimos el objeto inicial
+    const filtrosRaw = {
+        id_tienda: id_tienda,
+        fecha_gte: fecha_inicio,
+        fecha_lte: fecha_fin,
+        id_usuario: id_usuario,
+        id_empresa: req.user.id_empresa,
+        activo: 1,
+    };
+
+    // 2. Limpiamos propiedades vacías (undefined, null, o "")
+    const filtros = Object.fromEntries(
+        Object.entries(filtrosRaw).filter(([_, v]) => v != null && v !== "")
+    );
 
     const empleados = await asistenciaService.getReporteHoras({
-        filtros: {
-            id_tienda: id_tienda,
-            fecha_gte: fecha_inicio, // "2026-05-11"
-            fecha_lte: fecha_fin,    // "2026-05-17"
-            id_empresa: req.user.id_empresa,
-            activo: 1,
-        },
+        filtros,
         orderBy: 'fecha',
         orderDir: 'asc'
     });

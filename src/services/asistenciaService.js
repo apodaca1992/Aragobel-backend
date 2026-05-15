@@ -215,7 +215,9 @@ const getReporteHoras = async (opciones = {}) => {
         
         if (!reporteMap[userId]) {
             reporteMap[userId] = {
+                id_usuario: userId, // 1. Agregado ID de usuario
                 nombre: asist.nombre_usuario,
+                foto: asist.nombre_usuario ? asist.nombre_usuario.charAt(0).toUpperCase() : "?",
                 total_horas: 0,
                 extras: 0,
                 faltantes: 0,
@@ -240,7 +242,6 @@ const getReporteHoras = async (opciones = {}) => {
                 // Caso A: Ya salió (Cálculo normal)
                 salida = eventos.SALIDA.hora;
                 hReferenciaSalida = parseHoraADecimal(salida);
-                estatusDia = "TERMINADO";
             } else {
                 // Caso B: NO ha salido. Usamos la hora actual
                 // Obtenemos la hora actual en la zona horaria de la tienda/asistencia
@@ -248,10 +249,7 @@ const getReporteHoras = async (opciones = {}) => {
                 const horaActualLocal = now.toLocaleTimeString("sv-SE", { hour12: false });
                 hReferenciaSalida = parseHoraADecimal(horaActualLocal);
                 salida = "EN CURSO...";
-                estatusDia = "TRABAJANDO";
             }
-
-            let estanciaTotal = hReferenciaSalida - hEntrada;
 
             // --- LÓGICA DE COMIDA ---
             if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
@@ -261,20 +259,35 @@ const getReporteHoras = async (opciones = {}) => {
                 tiempoComida = comidaDefault;
             }
 
-            horasEfectivas = Math.max(0, estanciaTotal - tiempoComida);
+            horasEfectivas = Math.max(0, hReferenciaSalida - hEntrada - tiempoComida);
         }
 
         // Diferencia contra la jornada
-        let diferencia = horasEfectivas - jornadaMeta;
+        let diferenciaOriginal = horasEfectivas - jornadaMeta;
+        // 2. REDONDEO CLAVE: Forzamos a que solo importen 2 decimales para la comparación
+        let diferencia = Number(diferenciaOriginal.toFixed(2));
+
+        let estatusLabel = "A tiempo";
+        let colorJornada = "light";
+
+        // Tolerancia de 0.02 para evitar marcar "Faltante" por segundos de redondeo
+        if (horasEfectivas > 0) {
+            if (diferencia > 0) {
+                estatusLabel = `Extra (${diferencia.toFixed(2)} hrs)`;
+                colorJornada = "success";
+            } else if (diferencia < 0) {
+                estatusLabel = `Faltante (${Math.abs(diferencia).toFixed(2)} hrs)`;
+                colorJornada = "danger";
+            }
+        } else {
+            estatusLabel = `Faltante (${jornadaMeta.toFixed(2)} hrs)`;
+            colorJornada = "danger";
+        }
 
         reporteMap[userId].total_horas += horasEfectivas;
         
-        if (horasEfectivas > 0) {
-            if (diferencia > 0) reporteMap[userId].extras += diferencia;
-            else if (diferencia < 0) reporteMap[userId].faltantes += Math.abs(diferencia);
-        } else {
-            reporteMap[userId].faltantes += jornadaMeta;
-        }
+        if (diferencia > 0) reporteMap[userId].extras += diferencia;
+        else if (diferencia < 0) reporteMap[userId].faltantes += Math.abs(diferencia);        
 
         reporteMap[userId].asistencias.push({
             fecha: asist.fecha,
@@ -282,7 +295,8 @@ const getReporteHoras = async (opciones = {}) => {
             salida,
             total_efectivo: Number(horasEfectivas.toFixed(2)),
             jornada_asignada: jornadaMeta,
-            estatus: estatusDia
+            estatus: estatusLabel,
+            color: colorJornada
         });
     }
 
