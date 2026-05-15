@@ -2,19 +2,6 @@ const authService = require('../services/authService');
 const catchAsync = require('../utils/catchAsync');
 const AppError = require('../utils/appError');
 
-exports.register = catchAsync(async (req, res, next) => {
-    const nuevoUsuario = await authService.registrar({
-        ...req.body,
-        id_empresa: req.user.id_empresa // Viene del token decodificado
-    });
-    const { contrasena, ...usuarioSinPassword } = nuevoUsuario;
-    return res.status(201).json({
-        data: {
-            user: usuarioSinPassword
-        }
-    });
-});
-
 exports.login = catchAsync(async (req, res, next) => {
     const { usuario, contrasena } = req.body;
 
