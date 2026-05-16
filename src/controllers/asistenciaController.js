@@ -138,3 +138,37 @@ exports.generarReporte = catchAsync(async (req, res, next) => {
         empleados
     });
 });
+
+exports.descargarReportePdf = catchAsync(async (req, res, next) => {
+    const { fecha_inicio, fecha_fin, id_tienda, id_usuario } = req.query;
+
+    const filtrosRaw = {
+        id_tienda,
+        fecha_gte: fecha_inicio,
+        fecha_lte: fecha_fin,
+        id_usuario,
+        id_empresa: req.user.id_empresa,
+        activo: 1,
+    };
+
+    const filtros = Object.fromEntries(
+        Object.entries(filtrosRaw).filter(([_, v]) => v != null && v !== "")
+    );
+
+    const empleados = await asistenciaService.getReporteHoras({
+        filtros,
+        orderBy: 'fecha',
+        orderDir: 'asc'
+    });
+
+    // Configurar cabeceras de respuesta para descarga de archivo (Blob)
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_Asistencia.pdf`);
+
+    // LLAMADA CON AWAIT: Obtenemos el buffer del PDF generado de manera asíncrona
+    const periodo = { inicio: fecha_inicio || 'Inicio', fin: fecha_fin || 'Fin' };
+    const pdfBuffer = await asistenciaService.generarPdfReporte(empleados, periodo, filtros.id_tienda, req.user.id_empresa);
+    
+    // ENVIAR EL ARCHIVO: Al ser un buffer, usamos res.send() en lugar de .pipe()
+    res.send(pdfBuffer);
+});

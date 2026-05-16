@@ -3,6 +3,7 @@ const { db, admin } = require('../../config/firebase');
 const AppError = require('../utils/appError');
 const logger = require('../utils/logger');
 const geoUtils = require('../utils/geoUtils');
+const pdfGenerator = require('../utils/pdfGenerator');
 
 const getAll = async (opciones = {}) => {
     // 1. Extraemos los filtros de las opciones
@@ -314,4 +315,80 @@ const parseHoraADecimal = (horaStr) => {
     return hrs + (mins / 60) + (secs / 3600);
 };
 
-module.exports = { getAll, getById, create, update, remove, getReporteHoras };
+const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
+    const db = admin.firestore();
+    
+    let nombreEmpresa = 'ARAGOBEL';
+    let nombreTienda = 'Sucursal';
+
+    try {
+        // Disparamos ambas promesas en paralelo para ahorrar la mitad del tiempo de espera
+        const [empresaDoc, tiendaDoc] = await Promise.all([
+            id_empresa ? db.collection('empresas').doc(id_empresa).get() : null,
+            id_tienda ? db.collection('tiendas').doc(id_tienda).get() : null
+        ]);
+
+        // Asignamos los nombres directamente si los documentos existen
+        if (empresaDoc?.exists) nombreEmpresa = empresaDoc.data().nombre || nombreEmpresa;
+        if (tiendaDoc?.exists) nombreTienda = tiendaDoc.data().nombre || nombreTienda;
+
+    } catch (error) {
+        console.error('Error al traer contexto dinámico para el PDF:', error);
+    }
+
+    // 3. Ahora sí, construimos el contenido del PDF con la data real de la BD
+    const contenidoPdf = [
+        { text: `REPORTE DE ASISTENCIAS`, style: 'headerTitle' },
+        { text: `Empresa: ${nombreEmpresa}`, style: 'headerSubtitleStore' },
+        { text: `Tienda: ${nombreTienda}`, style: 'headerSubtitleStore' },
+        { text: `Periodo: ${periodo.inicio} al ${periodo.fin}`, style: 'headerSubtitleDates' }
+    ];
+
+    // 2. Mapeamos los datos de los empleados a la estructura de pdfmake
+    empleados.forEach(emp => {
+        contenidoPdf.push({ text: `Empleado: ${emp.nombre}`, style: 'empName' });
+        contenidoPdf.push({ 
+            text: `Horas Totales: ${emp.total_horas} hrs  |  Extras: ${emp.extras} hrs  |  Faltantes: ${emp.faltantes} hrs`, 
+            style: 'empMeta' 
+        });
+
+        const tablaAsistencias = {
+            table: {
+                headerRows: 1,
+                widths: ['*', 'auto', 'auto', 'auto', '*'],
+                body: [
+                    [
+                        { text: 'Fecha', style: 'tableHeader' },
+                        { text: 'Entrada', style: 'tableHeader' },
+                        { text: 'Salida', style: 'tableHeader' },
+                        { text: 'Total Efectivo', style: 'tableHeader' },
+                        { text: 'Estatus', style: 'tableHeader' }
+                    ]
+                ]
+            },
+            layout: 'lightHorizontalLines'
+        };
+
+        emp.asistencias.forEach(asist => {
+            tablaAsistencias.table.body.push([
+                { text: asist.fecha, style: 'tableBody' },
+                { text: asist.entrada, style: 'tableBody' },
+                { text: asist.salida, style: 'tableBody' },
+                { text: `${asist.total_efectivo} hrs`, style: 'tableBody' },
+                { text: asist.estatus, style: 'tableBody' }
+            ]);
+        });
+
+        contenidoPdf.push(tablaAsistencias);
+    });
+
+    const estilosAsistencia = {
+        empName: { fontSize: 12, bold: true, margin: [0, 15, 0, 3] },
+        empMeta: { fontSize: 9, color: '#666', margin: [0, 0, 0, 10] }
+    };
+
+    // USAMOS AWAIT: Esperamos a que el utilitario genere el Buffer completo
+    return await pdfGenerator.createReporteBuffer(contenidoPdf, estilosAsistencia);
+};
+
+module.exports = { getAll, getById, create, update, remove, getReporteHoras, generarPdfReporte };
