@@ -4,6 +4,8 @@ const entregaController = require('../controllers/entregaController');
 const { validarToken, checkPermission } = require('../middlewares/authMiddleware');
 
 // GET /api/Entregas
+router.get('/descargarReportePdf', validarToken, checkPermission(), entregaController.descargarReportePdf); 
+router.get('/generarReporte', validarToken, checkPermission(), entregaController.generarReporte); 
 router.get('/', validarToken, checkPermission(), entregaController.getEntregas);           // Listar todas
 router.get('/:id', validarToken, checkPermission(), entregaController.getEntregaById);     // Ver una
 router.post('/', validarToken, checkPermission(), entregaController.createEntrega);        // Crear

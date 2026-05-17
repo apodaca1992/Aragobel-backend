@@ -14,8 +14,11 @@ class PdfGenerator {
 
     /**
      * Genera un Buffer de PDF de manera asíncrona usando Promesas
+     * @param {Array} content - Estructura del contenido del PDF
+     * @param {Object} customStyles - Estilos personalizados que sobreescriben a los por defecto
+     * @param {Object} opcionesExtra - Configuraciones de página extra como pageOrientation, pageSize, etc.
      */
-    async createReporteBuffer(content, customStyles = {}) {
+    async createReporteBuffer(content, customStyles = {}, opcionesExtra = {}) {
         const printer = new PdfPrinter(this.fonts);
 
         const defaultStyles = {
@@ -29,11 +32,11 @@ class PdfGenerator {
         const docDefinition = {
             content: content,
             styles: defaultStyles,
-            defaultStyle: { font: 'Helvetica' }
+            defaultStyle: { font: 'Helvetica' },
+            ...opcionesExtra // <--- AQUÍ: Combinamos propiedades como pageOrientation: 'landscape' de forma dinámica
         };
 
-        // SOLUCIÓN AL ERROR: En la versión clásica de Node, el método oficial 
-        // para compilar el documento se llama 'createPdfKitDocument'
+        // En la versión clásica de Node, compilamos el documento usando createPdfKitDocument
         const pdfDoc = printer.createPdfKitDocument(docDefinition);
 
         // Convertimos el flujo de datos del documento en un Buffer binario para el async/await

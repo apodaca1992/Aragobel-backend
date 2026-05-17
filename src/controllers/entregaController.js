@@ -82,3 +82,72 @@ exports.deleteEntrega = catchAsync(async (req, res, next) => {
         data: eliminado
     });
 });
+
+exports.generarReporte = catchAsync(async (req, res, next) => {
+    const { fecha_inicio, fecha_fin, id_tienda, id_usuario, estatus, id_colonia } = req.query;
+
+    const filtrosRaw = {
+        id_tienda: id_tienda,
+        fecha_venta_gte: fecha_inicio,
+        fecha_venta_lte: fecha_fin,
+        id_usuario: id_usuario,
+        id_empresa: req.user.id_empresa,
+        id_colonia: id_colonia, // <--- Nuevo filtro exacto por ID de catálogo
+        estatus: estatus ? parseInt(estatus, 10) : undefined,
+        activo: 1,
+    };
+
+    const filtros = Object.fromEntries(
+        Object.entries(filtrosRaw).filter(([_, v]) => v != null && v !== "")
+    );
+
+    const entregas = await entregaService.getReporteEntregas({
+        filtros,
+        orderBy: 'fecha_venta',
+        orderDir: 'asc'
+    });
+
+    res.status(200).json({
+        periodo: `${fecha_inicio} al ${fecha_fin}`,
+        entregas
+    });
+});
+
+exports.descargarReportePdf = catchAsync(async (req, res, next) => {
+    const { fecha_inicio, fecha_fin, id_tienda, id_usuario, estatus, id_colonia } = req.query;
+
+    const filtrosRaw = {
+        id_tienda,
+        fecha_venta_gte: fecha_inicio,
+        fecha_venta_lte: fecha_fin,
+        id_usuario,
+        id_empresa: req.user.id_empresa,
+        id_colonia, // <--- Nuevo filtro exacto para el PDF
+        estatus: estatus ? parseInt(estatus, 10) : undefined,
+        activo: 1,
+    };
+
+    const filtros = Object.fromEntries(
+        Object.entries(filtrosRaw).filter(([_, v]) => v != null && v !== "")
+    );
+
+    const entregas = await entregaService.getReporteEntregas({
+        filtros,
+        orderBy: 'fecha_venta',
+        orderDir: 'asc'
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_Entregas.pdf`);
+
+    const periodo = { inicio: fecha_inicio || 'Inicio', fin: fecha_fin || 'Fin' };
+    
+    const pdfBuffer = await entregaService.generarPdfEntregas(
+        entregas, 
+        periodo, 
+        filtros.id_tienda, 
+        req.user.id_empresa
+    );
+    
+    res.send(pdfBuffer);
+});
