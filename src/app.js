@@ -12,6 +12,7 @@ const asistenciaRoutes = require('./routes/asistenciaRoutes');
 const entregaFeatureRoutes = require('./routes/entregaFeatureRoutes');
 const rolRoutes = require('./routes/rolRoutes');
 const usuarioRoutes = require('./routes/usuarioRoutes');
+const coloniaRoutes = require('./routes/coloniaRoutes');
 
 
 const whiteList = [
@@ -56,6 +57,7 @@ app.use('/api/asistencias', asistenciaRoutes);
 app.use('/api/entregas', entregaFeatureRoutes);
 app.use('/api/roles', rolRoutes);
 app.use('/api/usuarios', usuarioRoutes);
+app.use('/api/colonias', coloniaRoutes);
 
 // ESTE DEBE SER EL ÚLTIMO MIDDLEWARE
 app.use(globalErrorHandler);
