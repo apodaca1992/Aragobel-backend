@@ -231,7 +231,9 @@ const getReporteHoras = async (opciones = {}) => {
         let tiempoComida = 0;
         let entrada = "N/A";
         let salida = "N/A";
-        let estatusDia = "INCOMPLETO";
+        // --- NUEVAS VARIABLES PARA RESPUESTA ---
+        let salidaComer = "N/A";
+        let regresoComer = "N/A";
 
         // --- CÁLCULO DE ESTANCIA (REAL O PARCIAL) ---
         if (eventos.ENTRADA) {
@@ -252,12 +254,22 @@ const getReporteHoras = async (opciones = {}) => {
                 salida = "EN CURSO...";
             }
 
+            // --- LÓGICA DE COMIDA MODIFICADA ---
+            if (eventos.COMIDA_INICIO) {
+                salidaComer = eventos.COMIDA_INICIO.hora; // Guardamos la hora de salida a comer
+            }
+
+            if (eventos.COMIDA_FIN) {
+                regresoComer = eventos.COMIDA_FIN.hora; // Guardamos la hora de regreso de comer
+            }
+
             // --- LÓGICA DE COMIDA ---
             if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
                 tiempoComida = parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora);
             } else if (eventos.COMIDA_INICIO && !eventos.COMIDA_FIN) {
                 // Si está comiendo o no cerró comida, descontamos el default por precaución
                 tiempoComida = comidaDefault;
+                regresoComer = "EN COMIDA...";
             }
 
             horasEfectivas = Math.max(0, hReferenciaSalida - hEntrada - tiempoComida);
@@ -294,6 +306,8 @@ const getReporteHoras = async (opciones = {}) => {
             fecha: asist.fecha,
             entrada,
             salida,
+            salida_comer: salidaComer,   // <--- Agregado
+            regreso_comer: regresoComer, // <--- Agregado
             total_efectivo: Number(horasEfectivas.toFixed(2)),
             jornada_asignada: jornadaMeta,
             estatus: estatusLabel,
@@ -355,11 +369,13 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
         const tablaAsistencias = {
             table: {
                 headerRows: 1,
-                widths: ['*', 'auto', 'auto', 'auto', '*'],
+                widths: ['*', 'auto','auto','auto', 'auto', 'auto', '*'],
                 body: [
                     [
                         { text: 'Fecha', style: 'tableHeader' },
                         { text: 'Entrada', style: 'tableHeader' },
+                        { text: 'S. Comer', style: 'tableHeader' },
+                        { text: 'R. Comer', style: 'tableHeader' },
                         { text: 'Salida', style: 'tableHeader' },
                         { text: 'Total Efectivo', style: 'tableHeader' },
                         { text: 'Estatus', style: 'tableHeader' }
@@ -373,6 +389,8 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
             tablaAsistencias.table.body.push([
                 { text: asist.fecha, style: 'tableBody' },
                 { text: asist.entrada, style: 'tableBody' },
+                { text: asist.salida_comer, style: 'tableBody' },
+                { text: asist.regreso_comer, style: 'tableBody' },
                 { text: asist.salida, style: 'tableBody' },
                 { text: `${asist.total_efectivo} hrs`, style: 'tableBody' },
                 { text: asist.estatus, style: 'tableBody' }
@@ -384,7 +402,9 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
 
     const estilosAsistencia = {
         empName: { fontSize: 12, bold: true, margin: [0, 15, 0, 3] },
-        empMeta: { fontSize: 9, color: '#666', margin: [0, 0, 0, 10] }
+        empMeta: { fontSize: 9, color: '#666', margin: [0, 0, 0, 10] },
+        tableHeader: { fontSize: 8, bold: true, fillColor: '#eeeeee', alignment: 'center' }, // Bajamos a 8
+        tableBody: { fontSize: 8, alignment: 'center' } // Bajamos a 8 para que quepan holgadamente las 7 columnas
     };
 
     // USAMOS AWAIT: Esperamos a que el utilitario genere el Buffer completo
