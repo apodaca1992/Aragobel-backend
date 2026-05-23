@@ -44,19 +44,23 @@ const Firestore = {
             orderBy: oBy, 
             orderDir: oDir, 
             limit: lmt, 
-            lastDocId: lId 
+            lastDocId: lId,
+            ignorarLimite = false 
         } = opciones;
 
         // 2. Aplicamos la lógica de "Si no viene o está vacío, usa el default"
         const filtros = (fRaw && Object.keys(fRaw).length > 0) ? fRaw : { activo: 1 };
         const orderBy = oBy || 'createdAt';
         const orderDir = oDir || 'desc';
-        const limit = lmt || 10;
+        //const limit = lmt || 10;
         const lastDocId = lId || null;
+
+        // Si pide ignorar el limite, no asignamos el default de 10
+        const limit = ignorarLimite ? null : (lmt || 10);
 
         // CAMBIO CLAVE: 'coleccion' ahora puede ser "tiendas" o "usuarios/1/entregas"
         let query = db.collection(coleccion);
-        console.log('[opciones]:', { filtros, orderBy, orderDir, limit, lastDocId });
+        console.log('[opciones]:', { filtros, orderBy, orderDir, limit, lastDocId, ignorarLimite });
         // 1. Filtros
         Object.keys(filtros).forEach(key => {
 
@@ -117,10 +121,14 @@ const Firestore = {
         }
 
         // 4. Límite
-        query = query.limit(Number(limit));
+        if (!ignorarLimite && limit) {
+            console.log(`EJECUTANDO: query.limit(${Number(limit)})`);
+            query = query.limit(Number(limit));
+        } else {
+            console.log(`EJECUTANDO: Sin límite de documentos (ignorarLimite activo o modo reporte)`);
+        }
 
         const snapshot = await query.get();
-
         if (snapshot.empty) return [];
 
         return snapshot.docs.map(doc => formatData({

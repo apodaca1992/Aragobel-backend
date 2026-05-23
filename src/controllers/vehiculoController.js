@@ -10,8 +10,12 @@ exports.getVehiculos = catchAsync(async (req, res, next) => {
         lastDocId, 
         orderBy, 
         orderDir,
+        ignorarLimite,
         ...filtros // Todo lo demás que no sea paginación se va a filtros
     } = req.query;
+
+    // Convertimos el string "true" a un booleano real de JavaScript
+    const activarIgnorarLimite = ignorarLimite === 'true';
     
     // 2. Pasamos un objeto de opciones al servicio
     const vehiculos = await vehiculoService.getAll({
@@ -19,6 +23,7 @@ exports.getVehiculos = catchAsync(async (req, res, next) => {
         lastDocId, 
         orderBy, 
         orderDir,
+        ignorarLimite: activarIgnorarLimite,
         filtros: { ...filtros, id_empresa: req.user.id_empresa }
     });
     return res.status(200).json({
