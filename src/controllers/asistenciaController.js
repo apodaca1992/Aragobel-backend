@@ -135,7 +135,8 @@ exports.generarReporte = catchAsync(async (req, res, next) => {
     const empleados = await asistenciaService.getReporteHoras({
         filtros,
         orderBy: 'fecha',
-        orderDir: 'asc'
+        orderDir: 'asc',
+        ignorarLimite: true
     });
 
     res.status(200).json({
@@ -163,7 +164,8 @@ exports.descargarReportePdf = catchAsync(async (req, res, next) => {
     const empleados = await asistenciaService.getReporteHoras({
         filtros,
         orderBy: 'fecha',
-        orderDir: 'asc'
+        orderDir: 'asc',
+        ignorarLimite: true
     });
 
     // Configurar cabeceras de respuesta para descarga de archivo (Blob)
