@@ -109,7 +109,8 @@ exports.generarReporte = catchAsync(async (req, res, next) => {
     const entregas = await entregaService.getReporteEntregas({
         filtros,
         orderBy: 'fecha_venta',
-        orderDir: 'asc'
+        orderDir: 'asc',
+        ignorarLimite: true
     });
 
     res.status(200).json({
@@ -139,7 +140,8 @@ exports.descargarReportePdf = catchAsync(async (req, res, next) => {
     const entregas = await entregaService.getReporteEntregas({
         filtros,
         orderBy: 'fecha_venta',
-        orderDir: 'asc'
+        orderDir: 'asc',
+        ignorarLimite: true
     });
 
     res.setHeader('Content-Type', 'application/pdf');
