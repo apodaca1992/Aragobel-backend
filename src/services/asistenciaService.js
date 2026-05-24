@@ -90,7 +90,7 @@ const create = async (data) => {
     const userLng = parseFloat(data.ubicacion.lng);
 
     const distancia = geoUtils.calcularDistanciaMetros(userLat, userLng, tiendaLat, tiendaLng);
-    const RADIO_MAXIMO = 200; // 200 metros de tolerancia
+    const RADIO_MAXIMO = tienda.configuracion_asistencia?.radio_maximo_metros || 200;
 
     if (distancia > RADIO_MAXIMO) {
         logger.warn(`Intento de checada fuera de rango: Usuario a ${Math.round(distancia)} metros`);
