@@ -17,6 +17,7 @@ const coloniaRoutes = require('./routes/coloniaRoutes');
 
 const whiteList = [
     'http://localhost',          // Origen predeterminado de Capacitor en Android
+    'https://localhost',
     'capacitor://localhost',     // Origen predeterminado de Capacitor en iOS
     'http://localhost:8100',     // Para cuando corres 'ionic serve' en tu PC
     'http://localhost:4200'      // Por si usas Angular puro para pruebas
@@ -38,6 +39,7 @@ const corsOptions = {
     credentials: true // Importante si manejas cookies o sesiones
 };
 
+app.set('trust proxy', true);
 // Configuración básica (Permite todo - Solo para desarrollo local)
 app.use(cors(corsOptions));
 // Middlewares para entender JSON
