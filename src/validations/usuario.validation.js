@@ -55,6 +55,13 @@ const usuarioSchema = Joi.object({
             'array.base': 'Tiendas_asignadas debe ser un arreglo',
             'array.min': 'El usuario debe tener al menos una tienda'
         }),
+    tiendas_ids: Joi.array()
+        .min(1) // Al menos debe tener una tienda
+        .required()
+        .messages({
+            'array.base': 'Tiendas_asignadas debe ser un arreglo',
+            'array.min': 'El usuario debe tener al menos una tienda'
+        }),
     permisos: Joi.object().pattern(
         Joi.string().valid(...LISTA_RECURSOS), 
         Joi.array().items(Joi.string().valid(...LISTA_ACCIONES))

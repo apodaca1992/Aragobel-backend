@@ -2,7 +2,7 @@ const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto co
 const cryptoUtils = require('../utils/cryptoUtils');
 const AppError = require('../utils/appError');
 const logger = require('../utils/logger');
-const { admin } = require('../../config/firebase');
+const { db, admin } = require('../../config/firebase');
 
 const getAll = async (opciones = {}) => await Firestore.findAll('usuarios',opciones);
    
@@ -27,19 +27,17 @@ const getById = async (id,user) => {
 }
 
 const create = async (datos) => { 
-     // 1. Verificar si el nombre de usuario ya existe
-    const usuarioExistente = await Firestore.findOne('usuarios', 'usuario', datos.usuario);
+    if (!datos.usuario) throw new AppError('El nombre de usuario es obligatorio', 400);
+    
+    // Normalizamos a minúsculas y quitamos espacios para evitar "Admin" vs "admin"
+    const usuarioClean = datos.usuario.trim().toLowerCase();
+
+    // 1. Verificar si el nombre de usuario ya existe a nivel global (toda la colección)
+    const usuarioExistente = await Firestore.findOne('usuarios', 'usuario', usuarioClean);
     if (usuarioExistente) {
-        logger.warn(`El nombre de usuario ya está en uso (${datos.usuario})`);
+        logger.warn(`El nombre de usuario ya está en uso (${usuarioClean})`);
         throw new AppError('El nombre de usuario ya está en uso', 400);
     }
-
-    /*// 2. Verificar si el email ya existe
-    const emailExistente = await Firestore.findOne('usuarios', 'email', datos.email);
-    if (emailExistente) {
-        logger.warn(`El correo electrónico ya está registrado (${datos.email})`);
-        throw new AppError('El correo electrónico ya está registrado', 400);
-    }*/
 
     const hash = await cryptoUtils.hashPassword(datos.contrasena);
     return await Firestore.create('usuarios', {
@@ -61,6 +59,35 @@ const update = async (id, data, user) => {
     if (usuarioExistente.id_empresa !== user.id_empresa) {
         logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar usuario ${id}`);
         throw new AppError('No tienes permiso para editar el usuario', 403);
+    }
+
+    // 2. NUEVA VALIDACIÓN GLOBAL DE USUARIO ÚNICO EN UPDATE
+    if (data.usuario) {
+        const usuarioClean = data.usuario.trim().toLowerCase();
+        
+        // Buscamos si el nuevo nombre de usuario ya le pertenece a ALGUIEN MÁS
+        // Usamos la instancia db de Firestore directo para filtrar de manera óptima
+        const snapshot = await db.collection('usuarios')
+            .where('usuario', '==', usuarioClean)
+            .limit(1)
+            .get();
+
+        if (!snapshot.empty) {
+            const docEncontrado = snapshot.docs[0];
+            // Si el documento encontrado NO es el mismo usuario que estamos editando, es un duplicado real
+            if (docEncontrado.id !== id) {
+                logger.warn(`Intento de duplicar nombre de usuario en update: ${usuarioClean} por el usuario ${id}`);
+                throw new AppError('El nombre de usuario ya está en uso por otra cuenta', 400);
+            }
+        }
+        
+        // Guardamos la mutación limpia
+        data.usuario = usuarioClean;
+    }
+
+    // Si viene cambio de contraseña en el update, lo hasheamos de una vez
+    if (data.contrasena) {
+        data.contrasena = await cryptoUtils.hashPassword(data.contrasena);
     }
 
     const resultadoUpdate = await Firestore.update('usuarios',id,data);
