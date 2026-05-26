@@ -97,6 +97,34 @@ const create = async (data) => {
         throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
+    // --- 🚨 CANDADOS DE FLUJO DE NEGOCIO (SÓLO SI EL DOCUMENTO YA EXISTE) 🚨 ---
+    if (docSnap.exists) {
+        const jornadaExistente = docSnap.data();
+        const tipoEsquemaActual = jornadaExistente.tipo_esquema || "LIBRE";
+        const eventosActuales = jornadaExistente.eventos || {};
+
+        if (tipoEsquemaActual === 'FIJO') {
+            const tieneHorarioComida = !!(jornadaExistente.hora_salida_comer && jornadaExistente.hora_salida_comer !== "");
+
+            // REGLA 1: Bloquear Salida Final si tiene un horario de comida asignado pero no cerró su ciclo
+            if (tipoUpper === 'SALIDA' && tieneHorarioComida) {
+                const checkComidaInicio = eventosActuales.COMIDA_INICIO?.hora;
+                const checkComidaFin = eventosActuales.COMIDA_FIN?.hora;
+
+                if (!checkComidaInicio || !checkComidaFin) {
+                    logger.warn(`Intento de salida final bloqueado: Usuario ${data.id_usuario} no completó su ciclo de comida.`);
+                    throw new AppError('No puedes registrar tu salida final porque no has completado tus registros de comida (Inicio/Fin).', 400);
+                }
+            }
+
+            // REGLA 2: Bloquear botones de comida si es horario corrido (campos vacíos en la asistencia de hoy)
+            if ((tipoUpper === 'COMIDA_INICIO' || tipoUpper === 'COMIDA_FIN') && !tieneHorarioComida) {
+                logger.warn(`Intento de checada de comida bloqueado: Usuario ${data.id_usuario} tiene horario corrido sin descanso.`);
+                throw new AppError('Tu perfil está configurado con horario corrido. No tienes permitido registrar salidas a comer.', 400);
+            }
+        }
+    }
+
     // 5. Preparar objeto de actualización (Dot Notation para no borrar otros eventos)
     const updateData = {
         id_usuario: data.id_usuario,
@@ -128,8 +156,43 @@ const create = async (data) => {
         
         // Inyectamos la meta del día (snapshot)
         updateData.createdAt = admin.firestore.FieldValue.serverTimestamp();
-        updateData.jornada_efectiva = tiendaConfig?.jornada_efectiva ?? 9.5;
-        updateData.tiempo_comida_max = tiendaConfig?.tiempo_comida_max ?? 1.5;
+        updateData.tipo_esquema = tiendaConfig?.tipo_esquema || "LIBRE";
+
+        if (updateData.tipo_esquema === 'LIBRE') {
+            updateData.jornada_efectiva = tiendaConfig?.jornada_efectiva ?? 9.5;
+            updateData.tiempo_comida_max = tiendaConfig?.tiempo_comida_max ?? 1.5;
+        } 
+        else if (updateData.tipo_esquema === 'FIJO') {
+            const horaEntradaPactadaStr = tiendaConfig?.hora_entrada || "08:00:00";
+        
+            // -------------------------------------------------------------------------
+            // 🔥 NUEVA VALIDACIÓN: BLOQUEO TRAS 2 HORAS DE RETARDO
+            // -------------------------------------------------------------------------
+            const hRealDecimal = parseHoraADecimal(hora);            // Hora actual en la sucursal (ej: 10.5)
+            const hPactadaDecimal = parseHoraADecimal(horaEntradaPactadaStr); // Hora asignada (ej: 8.0)
+
+            // Si la hora actual supera por más de 2.0 horas a la pactada
+            if (hRealDecimal > (hPactadaDecimal + 2.0)) {
+                logger.warn(`Bloqueo de checada: Usuario ${data.id_usuario} intentó checar entrada a las ${hora} cuando su entrada era a las ${horaEntradaPactadaStr}`);
+                throw new AppError(
+                    `No puedes checar entrada. Ya transcurrieron más de 2 horas desde tu hora de ingreso oficial (${horaEntradaPactadaStr.substring(0, 5)}). Reporta tu asistencia con tu administrador.`, 
+                    403
+                );
+            }
+            // -------------------------------------------------------------------------
+
+            updateData.hora_entrada = horaEntradaPactadaStr;
+            updateData.hora_salida = tiendaConfig?.hora_salida || "17:30:00";
+            updateData.tolerancia_minutos = tiendaConfig?.tolerancia_minutos || 0;
+
+            // 🔥 VALIDACIÓN LIMPIA: Solo inyectamos los campos de comida si REALMENTE existen configurados
+            if (tiendaConfig?.hora_salida_comer && tiendaConfig?.hora_salida_comer !== "") {
+                updateData.hora_salida_comer = tiendaConfig.hora_salida_comer;
+            }
+            if (tiendaConfig?.hora_regreso_comer && tiendaConfig?.hora_regreso_comer !== "") {
+                updateData.hora_regreso_comer = tiendaConfig.hora_regreso_comer;
+            }
+        }
     }
 
     // 6. Guardar con MERGE (Crea si no existe, actualiza si sí)
@@ -205,18 +268,15 @@ const remove = async (id, user) => {
 const getReporteHoras = async (opciones = {}) => {
     const asistencias = await Firestore.findAll('asistencias', opciones);
     const reporteMap = {};
-
-    // 1. Necesitamos la fecha/hora actual del servidor para cálculos "en curso"
     const now = new Date();
 
     for (const asist of asistencias) {
         const userId = asist.id_usuario;
-        const jornadaMeta = asist.jornada_efectiva || 9.5;
-        const comidaDefault = asist.tiempo_comida_max || 1.5;
+        const tipoEsquema = asist.tipo_esquema || "LIBRE";
         
         if (!reporteMap[userId]) {
             reporteMap[userId] = {
-                id_usuario: userId, // 1. Agregado ID de usuario
+                id_usuario: userId,
                 nombre: asist.nombre_usuario,
                 foto: asist.nombre_usuario ? asist.nombre_usuario.charAt(0).toUpperCase() : "?",
                 total_horas: 0,
@@ -228,77 +288,144 @@ const getReporteHoras = async (opciones = {}) => {
 
         const eventos = asist.eventos || {};
         let horasEfectivas = 0;
-        let tiempoComida = 0;
         let entrada = "N/A";
         let salida = "N/A";
-        // --- NUEVAS VARIABLES PARA RESPUESTA ---
         let salidaComer = "N/A";
         let regresoComer = "N/A";
+        
+        let estatusLabel = "A tiempo";
+        let colorJornada = "light";
+        let diferencia = 0;
+        let jornadaAsignadaCalculo = 0;
 
-        // --- CÁLCULO DE ESTANCIA (REAL O PARCIAL) ---
         if (eventos.ENTRADA) {
             entrada = eventos.ENTRADA.hora;
-            const hEntrada = parseHoraADecimal(entrada);
-            let hReferenciaSalida;
+            const hEntradaReal = parseHoraADecimal(entrada);
+            let hSalidaReal;
 
             if (eventos.SALIDA) {
-                // Caso A: Ya salió (Cálculo normal)
                 salida = eventos.SALIDA.hora;
-                hReferenciaSalida = parseHoraADecimal(salida);
+                hSalidaReal = parseHoraADecimal(salida);
             } else {
-                // Caso B: NO ha salido. Usamos la hora actual
-                // Obtenemos la hora actual en la zona horaria de la tienda/asistencia
-                // Si no tenemos la tienda a mano, usamos la hora del servidor normalizada
                 const horaActualLocal = now.toLocaleTimeString("sv-SE", { hour12: false });
-                hReferenciaSalida = parseHoraADecimal(horaActualLocal);
+                hSalidaReal = parseHoraADecimal(horaActualLocal);
                 salida = "EN CURSO...";
             }
 
-            // --- LÓGICA DE COMIDA MODIFICADA ---
-            if (eventos.COMIDA_INICIO) {
-                salidaComer = eventos.COMIDA_INICIO.hora; // Guardamos la hora de salida a comer
+            if (eventos.COMIDA_INICIO) salidaComer = eventos.COMIDA_INICIO.hora;
+            if (eventos.COMIDA_FIN) regresoComer = eventos.COMIDA_FIN.hora;
+
+            // -------------------------------------------------------------
+            // CAMINO A: PROCESAMIENTO ESQUEMA LIBRE
+            // -------------------------------------------------------------
+            if (tipoEsquema === 'LIBRE') {
+                const jornadaMeta = asist.jornada_efectiva || 9.5;
+                const comidaDefault = asist.tiempo_comida_max || 1.5;
+                jornadaAsignadaCalculo = jornadaMeta;
+
+                let tiempoComida = 0;
+                if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
+                    tiempoComida = parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora);
+                } else if (eventos.COMIDA_INICIO && !eventos.COMIDA_FIN) {
+                    tiempoComida = comidaDefault;
+                    regresoComer = "EN COMIDA...";
+                }
+
+                horasEfectivas = Math.max(0, hSalidaReal - hEntradaReal - tiempoComida);
+                let diferenciaOriginal = horasEfectivas - jornadaMeta;
+                diferencia = Number(diferenciaOriginal.toFixed(2));
+
+                if (horasEfectivas > 0) {
+                    if (diferencia > 0) {
+                        estatusLabel = `Extra (${diferencia.toFixed(2)} hrs)`;
+                        colorJornada = "success";
+                    } else if (diferencia < 0) {
+                        estatusLabel = `Faltante (${Math.abs(diferencia).toFixed(2)} hrs)`;
+                        colorJornada = "danger";
+                    }
+                } else {
+                    estatusLabel = `Faltante (${jornadaMeta.toFixed(2)} hrs)`;
+                    colorJornada = "danger";
+                }
             }
+            // -------------------------------------------------------------
+            // CAMINO B: PROCESAMIENTO ESQUEMA FIJO
+            // -------------------------------------------------------------
+            else if (tipoEsquema === 'FIJO') {
+                const hEntradaTeorica = parseHoraADecimal(asist.hora_entrada || "08:00:00");
+                const hSalidaComerTeorica = parseHoraADecimal(asist.hora_salida_comer || "14:00:00");
+                const hRegresoComerTeorica = parseHoraADecimal(asist.hora_regreso_comer || "15:00:00");
+                const hSalidaTeorica = parseHoraADecimal(asist.hora_salida || "17:30:00");
+                const toleranciaHoras = (asist.tolerancia_minutos || 0) / 60;
 
-            if (eventos.COMIDA_FIN) {
-                regresoComer = eventos.COMIDA_FIN.hora; // Guardamos la hora de regreso de comer
-            }
+                const comidaTeorica = hRegresoComerTeorica - hSalidaComerTeorica;
+                jornadaAsignadaCalculo = (hSalidaTeorica - hEntradaTeorica) - comidaTeorica;
 
-            // --- LÓGICA DE COMIDA ---
-            if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
-                tiempoComida = parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora);
-            } else if (eventos.COMIDA_INICIO && !eventos.COMIDA_FIN) {
-                // Si está comiendo o no cerró comida, descontamos el default por precaución
-                tiempoComida = comidaDefault;
-                regresoComer = "EN COMIDA...";
-            }
+                let acumuladoMinutosFaltantes = 0;
+                let flagsFaltasOretardos = [];
 
-            horasEfectivas = Math.max(0, hReferenciaSalida - hEntrada - tiempoComida);
-        }
+                // 1. Evaluar Retardo en la Entrada
+                if (hEntradaReal > (hEntradaTeorica + toleranciaHoras)) {
+                    const minRetardo = Math.round((hEntradaReal - hEntradaTeorica) * 60);
+                    flagsFaltasOretardos.push(`Retardo (${minRetardo} min)`);
+                    acumuladoMinutosFaltantes += minRetardo;
+                }
 
-        // Diferencia contra la jornada
-        let diferenciaOriginal = horasEfectivas - jornadaMeta;
-        // 2. REDONDEO CLAVE: Forzamos a que solo importen 2 decimales para la comparación
-        let diferencia = Number(diferenciaOriginal.toFixed(2));
+                // 2. Evaluar exceso en tiempo de comida
+                if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
+                    const comidaReal = parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora);
+                    if (comidaReal > comidaTeorica) {
+                        const minExcesoComida = Math.round((comidaReal - comidaTeorica) * 60);
+                        flagsFaltasOretardos.push(`Exceso Comida (${minExcesoComida} min)`);
+                        acumuladoMinutosFaltantes += minExcesoComida;
+                    }
+                } else if (eventos.COMIDA_INICIO && !eventos.COMIDA_FIN) {
+                    regresoComer = "EN COMIDA...";
+                }
 
-        let estatusLabel = "A tiempo";
-        let colorJornada = "light";
+                // 3. Evaluar Salida Anticipada
+                if (!eventos.SALIDA) {
+                    if (hSalidaReal < hSalidaTeorica) {
+                        horasEfectivas = Math.max(0, hSalidaReal - hEntradaReal - (eventos.COMIDA_INICIO ? comidaTeorica : 0));
+                        estatusLabel = "EN CURSO...";
+                        colorJornada = "light";
+                    }
+                } else if (hSalidaReal < hSalidaTeorica) {
+                    const minSalidaAnticipada = Math.round((hSalidaTeorica - hSalidaReal) * 60);
+                    flagsFaltasOretardos.push(`Salida Temp (${minSalidaAnticipada} min)`);
+                    acumuladoMinutosFaltantes += minSalidaAnticipada;
+                }
 
-        // Tolerancia de 0.02 para evitar marcar "Faltante" por segundos de redondeo
-        if (horasEfectivas > 0) {
-            if (diferencia > 0) {
-                estatusLabel = `Extra (${diferencia.toFixed(2)} hrs)`;
-                colorJornada = "success";
-            } else if (diferencia < 0) {
-                estatusLabel = `Faltante (${Math.abs(diferencia).toFixed(2)} hrs)`;
-                colorJornada = "danger";
+                // Cómputo físico total de horas en planta
+                const comidaDescontar = (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) 
+                    ? (parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora))
+                    : (eventos.COMIDA_INICIO ? comidaTeorica : 0);
+                
+                horasEfectivas = Math.max(0, hSalidaReal - hEntradaReal - comidaDescontar);
+
+                // Asignación de saldos del reporte global
+                if (acumuladoMinutosFaltantes > 0) {
+                    diferencia = Number((-(acumuladoMinutosFaltantes / 60)).toFixed(2));
+                    estatusLabel = flagsFaltasOretardos.join(" | ");
+                    colorJornada = "danger";
+                } else if (eventos.SALIDA && hSalidaReal > hSalidaTeorica) {
+                    diferencia = Number((hSalidaReal - hSalidaTeorica).toFixed(2));
+                    estatusLabel = `Extra (${diferencia.toFixed(2)} hrs)`;
+                    colorJornada = "success";
+                } else {
+                    diferencia = 0;
+                    estatusLabel = "A tiempo";
+                    colorJornada = "success";
+                }
             }
         } else {
-            estatusLabel = `Faltante (${jornadaMeta.toFixed(2)} hrs)`;
+            jornadaAsignadaCalculo = asist.jornada_efectiva || 9.5;
+            diferencia = Number((-jornadaAsignadaCalculo).toFixed(2));
+            estatusLabel = "Faltante";
             colorJornada = "danger";
         }
 
         reporteMap[userId].total_horas += horasEfectivas;
-        
         if (diferencia > 0) reporteMap[userId].extras += diferencia;
         else if (diferencia < 0) reporteMap[userId].faltantes += Math.abs(diferencia);        
 
@@ -306,10 +433,10 @@ const getReporteHoras = async (opciones = {}) => {
             fecha: asist.fecha,
             entrada,
             salida,
-            salida_comer: salidaComer,   // <--- Agregado
-            regreso_comer: regresoComer, // <--- Agregado
+            salida_comer: salidaComer,
+            regreso_comer: regresoComer,
             total_efectivo: Number(horasEfectivas.toFixed(2)),
-            jornada_asignada: jornadaMeta,
+            jornada_asignada: Number(jornadaAsignadaCalculo.toFixed(2)),
             estatus: estatusLabel,
             color: colorJornada
         });
@@ -323,10 +450,9 @@ const getReporteHoras = async (opciones = {}) => {
     }));
 };
 
-// Función auxiliar para convertir "08:30:00" -> 8.5
 const parseHoraADecimal = (horaStr) => {
     const [hrs, mins, secs] = horaStr.split(':').map(Number);
-    return hrs + (mins / 60) + (secs / 3600);
+    return hrs + (mins / 60) + (secs / (secs ? 3600 : 1)); 
 };
 
 const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
