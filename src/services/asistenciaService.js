@@ -165,15 +165,23 @@ const create = async (data) => {
         else if (updateData.tipo_esquema === 'FIJO') {
             const horaEntradaPactadaStr = tiendaConfig?.hora_entrada || "08:00:00";
         
-            // -------------------------------------------------------------------------
-            // 🔥 NUEVA VALIDACIÓN: BLOQUEO TRAS 2 HORAS DE RETARDO
-            // -------------------------------------------------------------------------
-            const hRealDecimal = parseHoraADecimal(hora);            // Hora actual en la sucursal (ej: 10.5)
-            const hPactadaDecimal = parseHoraADecimal(horaEntradaPactadaStr); // Hora asignada (ej: 8.0)
+            const hRealDecimal = parseHoraADecimal(hora);            // Hora real actual del servidor
+            const hPactadaDecimal = parseHoraADecimal(horaEntradaPactadaStr); // Hora oficial asignada
 
-            // Si la hora actual supera por más de 2.0 horas a la pactada
+            // -------------------------------------------------------------------------
+            // 🔥 NUEVA VALIDACIÓN: BLOQUEO ANTES DE LA HORA ASIGNADA (FIJA)
+            // -------------------------------------------------------------------------
+            if (hRealDecimal < hPactadaDecimal) {
+                logger.warn(`Bloqueo por checada anticipada: Usuario ${data.id_usuario} intentó entrar a las ${hora} cuando su entrada es a las ${horaEntradaPactadaStr}`);
+                throw new AppError(
+                    `Aún no es tu hora de entrada. No puedes checar asistencia antes de tu horario oficial asignado (${horaEntradaPactadaStr.substring(0, 5)}).`, 
+                    403
+                );
+            }
+
+            // VALIDACIÓN POSTERIOR: BLOQUEO TRAS 2 HORAS DE RETARDO
             if (hRealDecimal > (hPactadaDecimal + 2.0)) {
-                logger.warn(`Bloqueo de checada: Usuario ${data.id_usuario} intentó checar entrada a las ${hora} cuando su entrada era a las ${horaEntradaPactadaStr}`);
+                logger.warn(`Bloqueo de checada por retardo excesivo: Usuario ${data.id_usuario} intentó checar entrada a las ${hora}`);
                 throw new AppError(
                     `No puedes checar entrada. Ya transcurrieron más de 2 horas desde tu hora de ingreso oficial (${horaEntradaPactadaStr.substring(0, 5)}). Reporta tu asistencia con tu administrador.`, 
                     403
