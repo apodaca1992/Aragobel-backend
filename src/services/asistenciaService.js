@@ -122,6 +122,17 @@ const create = async (data) => {
                 logger.warn(`Intento de checada de comida bloqueado: Usuario ${data.id_usuario} tiene horario corrido sin descanso.`);
                 throw new AppError('Tu perfil está configurado con horario corrido. No tienes permitido registrar salidas a comer.', 400);
             }
+
+            // 🔥 REGLA 3 (NUEVA): Bloquear salida a comer si es antes de la hora estipulada
+            if (tipoUpper === 'COMIDA_INICIO' && tieneHorarioComida) {
+                const hRealDecimal = parseHoraADecimal(hora);
+                const hSalidaComerPactadaDecimal = parseHoraADecimal(jornadaExistente.hora_salida_comer);
+
+                if (hRealDecimal < hSalidaComerPactadaDecimal) {
+                    logger.warn(`Intento de salida a comer anticipado: Usuario ${data.id_usuario} intentó salir a las ${hora} cuando su hora asignada es ${jornadaExistente.hora_salida_comer}`);
+                    throw new AppError(`Aún no es tu hora de salida a comer. No puedes registrarla antes de tu horario asignado (${jornadaExistente.hora_salida_comer.substring(0, 5)}).`, 403);
+                }
+            }
         }
     }
 
