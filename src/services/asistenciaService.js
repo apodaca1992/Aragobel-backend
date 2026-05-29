@@ -53,39 +53,73 @@ const getById = async (id, user) => {
     return asistenciaExistente;
 }
 
+// Función utilitaria interna para combinar la fecha base con las horas teóricas y sus desfases
+const crearTimestampConDesfase = (fechaBaseStr, horaTeoricaStr, diasDesfase = 0, timeZone) => {
+    const [year, month, day] = fechaBaseStr.split('-').map(Number);
+    const [hrs, mins, secs] = horaTeoricaStr.split(':').map(Number);
+    
+    let fecha = new Date(new Date().toLocaleString("sv-SE", { timeZone }));
+    fecha.setFullYear(year, month - 1, day);
+    fecha.setHours(hrs, mins, secs || 0, 0);
+    
+    if (diasDesfase > 0) {
+        fecha.setDate(fecha.getDate() + diasDesfase);
+    }
+    
+    return admin.firestore.Timestamp.fromDate(fecha);
+};
+
 const create = async (data) => {
     if (!data.tipo) throw new AppError('El tipo de checada es obligatorio', 400);
     const tipoUpper = data.tipo.toUpperCase();
 
-    // --- 2. VALIDACIÓN DE GEOCERCA (NUEVA) ---
     if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
 
     const tienda = await Firestore.findByPk('tiendas', data.id_tienda);
     if (!tienda) throw new AppError('La tienda no existe', 404);
 
-    // 1. Obtener tiempo oficial de Mazatlán
     const timeZone = tienda.configuracion_asistencia?.time_zone || "America/Mazatlan";
-    const localTime = new Date().toLocaleString("sv-SE", { timeZone });
-    const [fecha, hora] = localTime.split(' ');
+    const horaServidor = admin.firestore.FieldValue.serverTimestamp();
 
-    // 2. Definir ID ÚNICO por día y usuario
-    const docId = `${data.id_usuario}_${fecha}_${data.id_tienda}`;
-    const docRef = db.collection('asistencias').doc(docId);
+    let docRef;
+    let jornadaExistente = null;
 
-    // --- VALIDACIÓN DE DUPLICADOS ---
-    const docSnap = await docRef.get();
-    if (docSnap.exists) {
-        const jornada = docSnap.data();
-        if (jornada.eventos && jornada.eventos[tipoUpper]) {
-            throw new AppError(`Ya existe un registro de ${tipoUpper} para hoy`, 400);
+    // =========================================================================
+    // 🔍 LOCALIZACIÓN OPTIMIZADA DE JORNADA (TIRO DIRECTO POR ID O NUEVA ENTRADA)
+    // =========================================================================
+    if (tipoUpper === 'ENTRADA') {
+        const checklistActiva = await db.collection('asistencias')
+            .where('id_usuario', '==', data.id_usuario)
+            .where('status_jornada', '==', 'ACTIVA')
+            .limit(1)
+            .get();
+
+        if (!checklistActiva.empty) {
+            throw new AppError('No puedes registrar una entrada porque ya tienes una jornada activa abierta.', 400);
+        }
+        docRef = db.collection('asistencias').doc();
+    } else {
+        if (!data.id_jornada) {
+            throw new AppError('Falta el identificador de la jornada actual (id_jornada).', 400);
+        }
+
+        docRef = db.collection('asistencias').doc(data.id_jornada);
+        const docSnap = await docRef.get();
+
+        if (!docSnap.exists) {
+            throw new AppError('La jornada especificada no existe en el sistema.', 404);
+        }
+
+        jornadaExistente = docSnap.data();
+
+        if (jornadaExistente.status_jornada !== 'ACTIVA') {
+            throw new AppError('Esta jornada ya no se encuentra activa. Debes iniciar un nuevo registro de Entrada.', 400);
         }
     }
 
-    // Extraemos coordenadas de la tienda (asumiendo que en Firestore son GeoPoint o tienen lat/lng)
+    // --- VALIDACIÓN DE GEOCERCA ---
     const tiendaLat = tienda.ubicacion._latitude || tienda.ubicacion.lat;
     const tiendaLng = tienda.ubicacion._longitude || tienda.ubicacion.lng;
-
-    // Coordenadas que envía el usuario desde el móvil
     const userLat = parseFloat(data.ubicacion.lat);
     const userLng = parseFloat(data.ubicacion.lng);
 
@@ -97,127 +131,221 @@ const create = async (data) => {
         throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
-    // --- 🚨 CANDADOS DE FLUJO DE NEGOCIO (SÓLO SI EL DOCUMENTO YA EXISTE) 🚨 ---
-    if (docSnap.exists) {
-        const jornadaExistente = docSnap.data();
-        const tipoEsquemaActual = jornadaExistente.tipo_esquema || "LIBRE";
-        const eventosActuales = jornadaExistente.eventos || {};
+    const localTime = new Date().toLocaleString("sv-SE", { timeZone });
+    const [fechaHoy, horaHoy] = localTime.split(' ');
+
+    // --- 🚨 CANDADOS DE FLUJO DE NEGOCIO (ESTRUCTURA DE MAPA CLAVE-VALOR) 🚨 ---
+    if (jornadaExistente) {
+        const tipoEsquemaActual = (jornadaExistente.tipo_esquema || "LIBRE").toUpperCase();
+        const comidasMap = jornadaExistente.eventos?.comidas || {};
+        const listaComidasKeys = Object.keys(comidasMap).sort(); 
+        const ultimaKey = listaComidasKeys[listaComidasKeys.length - 1];
+        const ultimaComida = ultimaKey ? comidasMap[ultimaKey] : null;
+
+        if (tipoUpper === 'SALIDA' && jornadaExistente.eventos?.SALIDA) {
+            throw new AppError('Ya registraste tu salida para esta jornada.', 400);
+        }
 
         if (tipoEsquemaActual === 'FIJO') {
-            const tieneHorarioComida = !!(jornadaExistente.hora_salida_comer && jornadaExistente.hora_salida_comer !== "");
-
-            // REGLA 1: Bloquear Salida Final si tiene un horario de comida asignado pero no cerró su ciclo
-            if (tipoUpper === 'SALIDA' && tieneHorarioComida) {
-                const checkComidaInicio = eventosActuales.COMIDA_INICIO?.hora;
-                const checkComidaFin = eventosActuales.COMIDA_FIN?.hora;
-
-                if (!checkComidaInicio || !checkComidaFin) {
-                    logger.warn(`Intento de salida final bloqueado: Usuario ${data.id_usuario} no completó su ciclo de comida.`);
+            const comidasAsignadas = jornadaExistente.config_comidas || []; // 👈 Cambiado a config_comidas
+            
+            if (tipoUpper === 'SALIDA' && comidasAsignadas.length > 0) {
+                if (listaComidasKeys.length === 0 || (ultimaComida && !ultimaComida.COMIDA_FIN)) {
                     throw new AppError('No puedes registrar tu salida final porque no has completado tus registros de comida (Inicio/Fin).', 400);
                 }
             }
 
-            // REGLA 2: Bloquear botones de comida si es horario corrido (campos vacíos en la asistencia de hoy)
-            if ((tipoUpper === 'COMIDA_INICIO' || tipoUpper === 'COMIDA_FIN') && !tieneHorarioComida) {
-                logger.warn(`Intento de checada de comida bloqueado: Usuario ${data.id_usuario} tiene horario corrido sin descanso.`);
+            if ((tipoUpper === 'COMIDA_INICIO' || tipoUpper === 'COMIDA_FIN') && comidasAsignadas.length === 0) {
                 throw new AppError('Tu perfil está configurado con horario corrido. No tienes permitido registrar salidas a comer.', 400);
             }
 
-            // 🔥 REGLA 3 (NUEVA): Bloquear salida a comer si es antes de la hora estipulada
-            if (tipoUpper === 'COMIDA_INICIO' && tieneHorarioComida) {
-                const hRealDecimal = parseHoraADecimal(hora);
-                const hSalidaComerPactadaDecimal = parseHoraADecimal(jornadaExistente.hora_salida_comer);
-
-                if (hRealDecimal < hSalidaComerPactadaDecimal) {
-                    logger.warn(`Intento de salida a comer anticipado: Usuario ${data.id_usuario} intentó salir a las ${hora} cuando su hora asignada es ${jornadaExistente.hora_salida_comer}`);
-                    throw new AppError(`Aún no es tu hora de salida a comer. No puedes registrarla antes de tu horario asignado (${jornadaExistente.hora_salida_comer.substring(0, 5)}).`, 403);
+            if (tipoUpper === 'COMIDA_INICIO' && comidasAsignadas.length > 0) {
+                const indexSiguienteComida = listaComidasKeys.length; 
+                const comidaPactada = comidasAsignadas[indexSiguienteComida];
+                
+                if (comidaPactada) {
+                    const ahoraTimestamp = admin.firestore.Timestamp.now();
+                    if (ahoraTimestamp.seconds < comidaPactada.hora_salida_comer.seconds) { // 👈 Cambiado a hora_salida_comer
+                        throw new AppError(`Aún no es tu hora asignada para salir a: ${comidaPactada.nombre}.`, 403);
+                    }
                 }
             }
         }
+
+        if (tipoUpper === 'COMIDA_INICIO' && ultimaComida && !ultimaComida.COMIDA_FIN) {
+            throw new AppError('No puedes iniciar otra comida sin haber regresado de la anterior.', 400);
+        }
+        if (tipoUpper === 'COMIDA_FIN' && (!ultimaComida || (ultimaComida && ultimaComida.COMIDA_FIN))) {
+            throw new AppError('No has registrado una salida a comer activa para poder marcar un regreso.', 400);
+        }
     }
 
-    // 5. Preparar objeto de actualización (Dot Notation para no borrar otros eventos)
+    // =========================================================================
+    // 🛠️ CONSTRUCCIÓN DEL OBJETO DE ACTUALIZACIÓN
+    // =========================================================================
     const updateData = {
         id_usuario: data.id_usuario,
         nombre_usuario: data.nombre_usuario,
-        fecha: fecha,
         id_tienda: data.id_tienda,
         id_empresa: data.id_empresa,
         activo: 1,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: horaServidor,
     };
 
-    // Usamos el bracket notation para que la llave sea dinámica (ENTRADA, SALIDA, etc)
-    // Pero la enviamos como un objeto anidado real
-    updateData['eventos'] = {
-        [tipoUpper]: {
-            hora: hora,
-            ubicacion: new admin.firestore.GeoPoint(userLat, userLng),
-            timestamp: admin.firestore.FieldValue.serverTimestamp()
-        }
-    };
+    const geoPointUbicacion = new admin.firestore.GeoPoint(userLat, userLng);
 
-    // --- 3. LÓGICA ESPECÍFICA PARA ENTRADA (Snapshot de Configuración) ---
+    let tipoEsquemaResp = jornadaExistente?.tipo_esquema || "LIBRE";
+    let statusJornadaResp = jornadaExistente?.status_jornada || "ACTIVA";
+    let fechaJornadaResp = jornadaExistente?.fecha || fechaHoy;
+
+    // --- CASO A: REGISTRO DE ENTRADA ---
     if (tipoUpper === 'ENTRADA') {
         const usuario = await Firestore.findByPk('usuarios', data.id_usuario);
         if (!usuario) throw new AppError('Usuario no encontrado', 404);
 
-        // Buscar la configuración de la tienda asignada al usuario
         const tiendaConfig = usuario.tiendas_asignadas?.find(t => t.id_tienda === data.id_tienda);
+        const esquema = (tiendaConfig?.tipo_esquema || "LIBRE").toUpperCase();
         
-        // Inyectamos la meta del día (snapshot)
-        updateData.createdAt = admin.firestore.FieldValue.serverTimestamp();
-        updateData.tipo_esquema = tiendaConfig?.tipo_esquema || "LIBRE";
+        updateData.createdAt = horaServidor;
+        updateData.fecha = fechaHoy;
+        updateData.status_jornada = "ACTIVA";
+        updateData.tipo_esquema = esquema;
 
-        if (updateData.tipo_esquema === 'LIBRE') {
+        tipoEsquemaResp = esquema;
+        statusJornadaResp = "ACTIVA";
+        fechaJornadaResp = fechaHoy;
+
+        if (esquema === 'LIBRE') {
             updateData.jornada_efectiva = tiendaConfig?.jornada_efectiva ?? 9.5;
-            updateData.tiempo_comida_max = tiendaConfig?.tiempo_comida_max ?? 1.5;
+            
+            const configComidasUsuario = tiendaConfig?.config_comidas || [];
+            updateData.config_comidas = configComidasUsuario.map(c => ({
+                nombre: c.nombre || "Comida",
+                tiempo_comida_max: c.tiempo_comida_max ?? 1.5
+            }));
         } 
-        else if (updateData.tipo_esquema === 'FIJO') {
-            const horaEntradaPactadaStr = tiendaConfig?.hora_entrada || "08:00:00";
-        
-            const hRealDecimal = parseHoraADecimal(hora);            // Hora real actual del servidor
-            const hPactadaDecimal = parseHoraADecimal(horaEntradaPactadaStr); // Hora oficial asignada
+        else if (esquema === 'FIJO') {
+            const horaEntradaStr = tiendaConfig?.hora_entrada || "08:00:00"; 
+            const horaSalidaStr = tiendaConfig?.hora_salida || "17:30:00";   
+            const diasDesfaseSalida = tiendaConfig?.dias_desfase || 0;
 
-            // -------------------------------------------------------------------------
-            // 🔥 NUEVA VALIDACIÓN: BLOQUEO ANTES DE LA HORA ASIGNADA (FIJA)
-            // -------------------------------------------------------------------------
+            const hRealDecimal = parseHoraADecimal(horaHoy);            
+            const hPactadaDecimal = parseHoraADecimal(horaEntradaStr); 
+
             if (hRealDecimal < hPactadaDecimal) {
-                logger.warn(`Bloqueo por checada anticipada: Usuario ${data.id_usuario} intentó entrar a las ${hora} cuando su entrada es a las ${horaEntradaPactadaStr}`);
-                throw new AppError(
-                    `Aún no es tu hora de entrada. No puedes checar asistencia antes de tu horario oficial asignado (${horaEntradaPactadaStr.substring(0, 5)}).`, 
-                    403
-                );
+                throw new AppError(`Aún no es tu hora de entrada oficial (${horaEntradaStr.substring(0, 5)}).`, 403);
             }
-
-            // VALIDACIÓN POSTERIOR: BLOQUEO TRAS 2 HORAS DE RETARDO
             if (hRealDecimal > (hPactadaDecimal + 2.0)) {
-                logger.warn(`Bloqueo de checada por retardo excesivo: Usuario ${data.id_usuario} intentó checar entrada a las ${hora}`);
-                throw new AppError(
-                    `No puedes checar entrada. Ya transcurrieron más de 2 horas desde tu hora de ingreso oficial (${horaEntradaPactadaStr.substring(0, 5)}). Reporta tu asistencia con tu administrador.`, 
-                    403
-                );
+                throw new AppError(`No puedes checar entrada. Retardo excesivo mayor a 2 horas.`, 403);
             }
-            // -------------------------------------------------------------------------
 
-            updateData.hora_entrada = horaEntradaPactadaStr;
-            updateData.hora_salida = tiendaConfig?.hora_salida || "17:30:00";
-            updateData.tolerancia_minutos = tiendaConfig?.tolerancia_minutos || 0;
+            // Renombrados campos raíz asignados
+            updateData.hora_entrada = crearTimestampConDesfase(fechaHoy, horaEntradaStr, 0, timeZone); // 👈 Cambiado entrada_asignada
+            updateData.hora_salida = crearTimestampConDesfase(fechaHoy, horaSalidaStr, diasDesfaseSalida, timeZone); // 👈 Cambiado salida_asignada
 
-            // 🔥 VALIDACIÓN LIMPIA: Solo inyectamos los campos de comida si REALMENTE existen configurados
-            if (tiendaConfig?.hora_salida_comer && tiendaConfig?.hora_salida_comer !== "") {
-                updateData.hora_salida_comer = tiendaConfig.hora_salida_comer;
-            }
-            if (tiendaConfig?.hora_regreso_comer && tiendaConfig?.hora_regreso_comer !== "") {
-                updateData.hora_regreso_comer = tiendaConfig.hora_regreso_comer;
-            }
+            const comidasPactadas = tiendaConfig?.config_comidas || [];
+            // Cambiado comidas_asignadas por config_comidas en la base de datos
+            updateData.config_comidas = comidasPactadas.map(c => ({ 
+                nombre: c.nombre,
+                // Renombrados campos internos asignados de la comida
+                hora_salida_comer: crearTimestampConDesfase(fechaHoy, c.hora_comida_inicio, c.dias_desfase_comida_inicio || 0, timeZone), // 👈 Cambiado salida_comida_asignada
+                hora_regreso_comer: crearTimestampConDesfase(fechaHoy, c.hora_comida_fin, c.dias_desfase_comida_fin || 0, timeZone) // 👈 Cambiado regreso_comida_asignada
+            }));
         }
+
+        updateData.eventos = {
+            ENTRADA: {
+                timestamp: admin.firestore.Timestamp.now(),
+                ubicacion: geoPointUbicacion
+            },
+            comidas: {}
+        };
+
+        await docRef.set(updateData, { merge: true });
     }
 
-    // 6. Guardar con MERGE (Crea si no existe, actualiza si sí)
-    await docRef.set(updateData, { merge: true });
+    // --- CASO B: SALIDA A COMER (COMIDA_INICIO) ---
+    else if (tipoUpper === 'COMIDA_INICIO') {
+        const entradaRealDate = jornadaExistente.eventos.ENTRADA.timestamp.toDate();
+        const hoyDate = new Date();
+        const diasDesfase = Math.floor((hoyDate - entradaRealDate) / (1000 * 60 * 60 * 24));
 
-    return { id: docId, ...updateData };
+        const comidasMap = jornadaExistente.eventos?.comidas || {};
+        const totalComidasMarcadas = Object.keys(comidasMap).length;
+        
+        const campoDinamico = `eventos.comidas.comida_${totalComidasMarcadas}.COMIDA_INICIO`;
+
+        updateData[campoDinamico] = {
+            timestamp: admin.firestore.Timestamp.fromDate(hoyDate),
+            ubicacion: geoPointUbicacion,
+            dias_desfase_comida_inicio: diasDesfase
+        };
+
+        await docRef.update(updateData);
+    }
+
+    // --- CASO C: REGRESO DE COMER (COMIDA_FIN) ---
+    else if (tipoUpper === 'COMIDA_FIN') {
+        const entradaRealDate = jornadaExistente.eventos.ENTRADA.timestamp.toDate();
+        const hoyDate = new Date();
+        const diasDesfase = Math.floor((hoyDate - entradaRealDate) / (1000 * 60 * 60 * 24));
+
+        const comidasMap = jornadaExistente.eventos?.comidas || {};
+        const totalComidasMarcadas = Object.keys(comidasMap).length;
+        const indexUltima = Math.max(0, totalComidasMarcadas - 1);
+        
+        const campoDinamico = `eventos.comidas.comida_${indexUltima}.COMIDA_FIN`;
+
+        updateData[campoDinamico] = {
+            timestamp: admin.firestore.Timestamp.fromDate(hoyDate),
+            ubicacion: geoPointUbicacion,
+            dias_desfase_comida_fin: diasDesfase
+        };
+
+        await docRef.update(updateData);
+    }
+
+    // --- CASO D: SALIDA FINAL ---
+    else if (tipoUpper === 'SALIDA') {
+        updateData.status_jornada = "COMPLETADA";
+        updateData['eventos.SALIDA'] = {
+            timestamp: admin.firestore.Timestamp.now(),
+            ubicacion: geoPointUbicacion
+        };
+
+        statusJornadaResp = "COMPLETADA";
+
+        await docRef.update(updateData);
+    }
+
+    // =========================================================================
+    // 🧼 SANITIZACIÓN DE LA RESPUESTA JSON (FRONTEND FRIENDLY)
+    // =========================================================================
+    const fechaISO = new Date().toISOString(); 
+
+    return {
+        id: docRef.id,
+        id_usuario: data.id_usuario,
+        nombre_usuario: data.nombre_usuario,
+        id_tienda: data.id_tienda,
+        id_empresa: data.id_empresa,
+        activo: 1,
+        status_jornada: statusJornadaResp,
+        tipo_esquema: tipoEsquemaResp,
+        fecha: fechaJornadaResp,
+        updatedAt: fechaISO,
+        ...(tipoUpper === 'ENTRADA' && {
+            createdAt: fechaISO,
+            // En ambos esquemas ahora se guarda y retorna bajo la llave "config_comidas"
+            config_comidas: updateData.config_comidas,
+            ...(tipoEsquemaResp === 'LIBRE' && { journey_efectiva: updateData.jornada_efectiva })
+        }),
+        evento_registrado: {
+            tipo: tipoUpper,
+            timestamp: fechaISO,
+            ubicacion: `${userLat.toFixed(6)},${userLng.toFixed(6)}`
+        }
+    };
 }
 
 const update = async (id, data, user) => {
