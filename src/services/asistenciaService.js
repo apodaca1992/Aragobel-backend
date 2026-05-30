@@ -84,10 +84,15 @@ const create = async (data) => {
     let docRef;
     let jornadaExistente = null;
 
+    // Obtener la fecha local actual según la zona horaria de la tienda antes de validar
+    const localTime = new Date().toLocaleString("sv-SE", { timeZone });
+    const [fechaHoy, horaHoy] = localTime.split(' ');
+
     // =========================================================================
-    // 🔍 LOCALIZACIÓN OPTIMIZADA DE JORNADA (TIRO DIRECTO POR ID O NUEVA ENTRADA)
+    // 🔍 LOCALIZACIÓN OPTIMIZADA DE JORNADA / CANDADO DE DUPLICADOS EN ENTRADA
     // =========================================================================
     if (tipoUpper === 'ENTRADA') {
+        // 1. Verificar si hay una jornada abierta y colgada actualmente
         const checklistActiva = await db.collection('asistencias')
             .where('id_usuario', '==', data.id_usuario)
             .where('status_jornada', '==', 'ACTIVA')
@@ -97,7 +102,33 @@ const create = async (data) => {
         if (!checklistActiva.empty) {
             throw new AppError('No puedes registrar una entrada porque ya tienes una jornada activa abierta.', 400);
         }
+
+        // 2. Obtener el esquema del usuario para poder realizar la validación de duplicado exacto
+        const usuario = await Firestore.findByPk('usuarios', data.id_usuario);
+        if (!usuario) throw new AppError('Usuario no encontrado', 404);
+
+        const tiendaConfig = usuario.tiendas_asignadas?.find(t => t.id_tienda === data.id_tienda);
+        const esquema = (tiendaConfig?.tipo_esquema || "LIBRE").toUpperCase();
+
+        // 3. 🚨 CANDADO DE DUPLICADOS HISTÓRICOS POR FECHA Y ESQUEMA 🚨
+        const chequeoDuplicado = await db.collection('asistencias')
+            .where('fecha', '==', fechaHoy)
+            .where('id_usuario', '==', data.id_usuario)
+            .where('id_tienda', '==', data.id_tienda)
+            .where('id_empresa', '==', data.id_empresa)
+            .where('tipo_esquema', '==', esquema)
+            .limit(1)
+            .get();
+
+        if (!chequeoDuplicado.empty) {
+            throw new AppError(`Ya cuentas con un registro de asistencia generado para el día de hoy (${fechaHoy}) bajo el esquema ${esquema}.`, 400);
+        }
+
+        // Si pasa ambos filtros, se permite inicializar el nuevo documento descriptor
         docRef = db.collection('asistencias').doc();
+        // Guardamos temporalmente la información del usuario en el scope para evitar re-consultar abajo
+        data._usuarioCache = usuario;
+        data._tiendaConfigCache = tiendaConfig;
     } else {
         if (!data.id_jornada) {
             throw new AppError('Falta el identificador de la jornada actual (id_jornada).', 400);
@@ -131,9 +162,6 @@ const create = async (data) => {
         throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
-    const localTime = new Date().toLocaleString("sv-SE", { timeZone });
-    const [fechaHoy, horaHoy] = localTime.split(' ');
-
     // --- 🚨 CANDADOS DE FLUJO DE NEGOCIO (ESTRUCTURA DE MAPA CLAVE-VALOR) 🚨 ---
     if (jornadaExistente) {
         const tipoEsquemaActual = (jornadaExistente.tipo_esquema || "LIBRE").toUpperCase();
@@ -141,31 +169,31 @@ const create = async (data) => {
         const listaComidasKeys = Object.keys(comidasMap).sort(); 
         const ultimaKey = listaComidasKeys[listaComidasKeys.length - 1];
         const ultimaComida = ultimaKey ? comidasMap[ultimaKey] : null;
+        
+        const comidasAsignadas = jornadaExistente.config_comidas || [];
 
         if (tipoUpper === 'SALIDA' && jornadaExistente.eventos?.SALIDA) {
             throw new AppError('Ya registraste tu salida para esta jornada.', 400);
         }
 
+        if ((tipoUpper === 'COMIDA_INICIO' || tipoUpper === 'COMIDA_FIN') && comidasAsignadas.length === 0) {
+            throw new AppError('Tu perfil está configurado con horario corrido. No tienes permitido registrar salidas a comer.', 400);
+        }
+
+        if (tipoUpper === 'SALIDA' && comidasAsignadas.length > 0) {
+            if (listaComidasKeys.length === 0 || (ultimaComida && !ultimaComida.COMIDA_FIN)) {
+                throw new AppError('No puedes registrar tu salida final porque no has completado tus registros de comida (Inicio/Fin).', 400);
+            }
+        }
+
         if (tipoEsquemaActual === 'FIJO') {
-            const comidasAsignadas = jornadaExistente.config_comidas || []; // 👈 Cambiado a config_comidas
-            
-            if (tipoUpper === 'SALIDA' && comidasAsignadas.length > 0) {
-                if (listaComidasKeys.length === 0 || (ultimaComida && !ultimaComida.COMIDA_FIN)) {
-                    throw new AppError('No puedes registrar tu salida final porque no has completado tus registros de comida (Inicio/Fin).', 400);
-                }
-            }
-
-            if ((tipoUpper === 'COMIDA_INICIO' || tipoUpper === 'COMIDA_FIN') && comidasAsignadas.length === 0) {
-                throw new AppError('Tu perfil está configurado con horario corrido. No tienes permitido registrar salidas a comer.', 400);
-            }
-
             if (tipoUpper === 'COMIDA_INICIO' && comidasAsignadas.length > 0) {
                 const indexSiguienteComida = listaComidasKeys.length; 
                 const comidaPactada = comidasAsignadas[indexSiguienteComida];
                 
                 if (comidaPactada) {
                     const ahoraTimestamp = admin.firestore.Timestamp.now();
-                    if (ahoraTimestamp.seconds < comidaPactada.hora_salida_comer.seconds) { // 👈 Cambiado a hora_salida_comer
+                    if (ahoraTimestamp.seconds < comidaPactada.hora_salida_comer.seconds) {
                         throw new AppError(`Aún no es tu hora asignada para salir a: ${comidaPactada.nombre}.`, 403);
                     }
                 }
@@ -200,10 +228,8 @@ const create = async (data) => {
 
     // --- CASO A: REGISTRO DE ENTRADA ---
     if (tipoUpper === 'ENTRADA') {
-        const usuario = await Firestore.findByPk('usuarios', data.id_usuario);
-        if (!usuario) throw new AppError('Usuario no encontrado', 404);
-
-        const tiendaConfig = usuario.tiendas_asignadas?.find(t => t.id_tienda === data.id_tienda);
+        // Recuperamos las configuraciones guardadas previamente en la validación de arriba
+        const tiendaConfig = data._tiendaConfigCache;
         const esquema = (tiendaConfig?.tipo_esquema || "LIBRE").toUpperCase();
         
         updateData.createdAt = horaServidor;
@@ -239,17 +265,16 @@ const create = async (data) => {
                 throw new AppError(`No puedes checar entrada. Retardo excesivo mayor a 2 horas.`, 403);
             }
 
-            // Renombrados campos raíz asignados
-            updateData.hora_entrada = crearTimestampConDesfase(fechaHoy, horaEntradaStr, 0, timeZone); // 👈 Cambiado entrada_asignada
-            updateData.hora_salida = crearTimestampConDesfase(fechaHoy, horaSalidaStr, diasDesfaseSalida, timeZone); // 👈 Cambiado salida_asignada
+            updateData.tolerancia_minutos = tiendaConfig?.tolerancia_minutos ?? 0;
+
+            updateData.hora_entrada = crearTimestampConDesfase(fechaHoy, horaEntradaStr, 0, timeZone); 
+            updateData.hora_salida = crearTimestampConDesfase(fechaHoy, horaSalidaStr, diasDesfaseSalida, timeZone); 
 
             const comidasPactadas = tiendaConfig?.config_comidas || [];
-            // Cambiado comidas_asignadas por config_comidas en la base de datos
             updateData.config_comidas = comidasPactadas.map(c => ({ 
                 nombre: c.nombre,
-                // Renombrados campos internos asignados de la comida
-                hora_salida_comer: crearTimestampConDesfase(fechaHoy, c.hora_comida_inicio, c.dias_desfase_comida_inicio || 0, timeZone), // 👈 Cambiado salida_comida_asignada
-                hora_regreso_comer: crearTimestampConDesfase(fechaHoy, c.hora_comida_fin, c.dias_desfase_comida_fin || 0, timeZone) // 👈 Cambiado regreso_comida_asignada
+                hora_salida_comer: crearTimestampConDesfase(fechaHoy, c.hora_comida_inicio, c.dias_desfase_comida_inicio || 0, timeZone), 
+                hora_regreso_comer: crearTimestampConDesfase(fechaHoy, c.hora_comida_fin, c.dias_desfase_comida_fin || 0, timeZone) 
             }));
         }
 
@@ -260,6 +285,10 @@ const create = async (data) => {
             },
             comidas: {}
         };
+
+        // Eliminar las variables temporales de caché antes de guardar en Firestore
+        delete data._usuarioCache;
+        delete data._tiendaConfigCache;
 
         await docRef.set(updateData, { merge: true });
     }
@@ -336,8 +365,8 @@ const create = async (data) => {
         updatedAt: fechaISO,
         ...(tipoUpper === 'ENTRADA' && {
             createdAt: fechaISO,
-            // En ambos esquemas ahora se guarda y retorna bajo la llave "config_comidas"
             config_comidas: updateData.config_comidas,
+            ...(tipoEsquemaResp === 'FIJO' && { tolerancia_minutos: updateData.tolerancia_minutos }),
             ...(tipoEsquemaResp === 'LIBRE' && { journey_efectiva: updateData.jornada_efectiva })
         }),
         evento_registrado: {
@@ -346,7 +375,7 @@ const create = async (data) => {
             ubicacion: `${userLat.toFixed(6)},${userLng.toFixed(6)}`
         }
     };
-}
+};
 
 const update = async (id, data, user) => {
     const asistenciaExistente = await Firestore.findByPk('asistencias',id);
@@ -417,9 +446,35 @@ const getReporteHoras = async (opciones = {}) => {
     const reporteMap = {};
     const now = new Date();
 
+    // Helper para obtener el objeto Date real respetando la zona horaria (evita desfases de UTC)
+    const obtenerDateConTZ = (timestamp, timeZone = "America/Mazatlan") => {
+        if (!timestamp) return null;
+        let dateObj;
+        if (typeof timestamp.toDate === 'function') dateObj = timestamp.toDate();
+        else if (timestamp instanceof Date) dateObj = timestamp;
+        else if (timestamp._seconds || timestamp.seconds) dateObj = new Date((timestamp._seconds || timestamp.seconds) * 1000);
+        else if (typeof timestamp === 'string' && !isNaN(Date.parse(timestamp))) dateObj = new Date(timestamp);
+        else return null;
+
+        // Ajuste forzado de zona horaria para cálculos numéricos puros
+        const tzAjuste = new Date(dateObj.toLocaleString("en-US", { timeZone }));
+        return tzAjuste;
+    };
+
+    // Helper estético para el reporte escrito
+    const desglosarTimestamp = (timestamp, timeZone = "America/Mazatlan") => {
+        const dateObj = obtenerDateConTZ(timestamp, timeZone);
+        if (!dateObj) return null;
+        return {
+            fecha: dateObj.toLocaleDateString("sv-SE"), // "YYYY-MM-DD"
+            hora: dateObj.toLocaleTimeString("sv-SE", { hour12: false }) // "HH:MM:SS"
+        };
+    };
+
     for (const asist of asistencias) {
         const userId = asist.id_usuario;
         const tipoEsquema = asist.tipo_esquema || "LIBRE";
+        const timeZone = asist.time_zone || "America/Mazatlan"; 
         
         if (!reporteMap[userId]) {
             reporteMap[userId] = {
@@ -434,51 +489,88 @@ const getReporteHoras = async (opciones = {}) => {
         }
 
         const eventos = asist.eventos || {};
+        const entradaReal = eventos.ENTRADA || asist['eventos.ENTRADA'];
+        const salidaReal = eventos.SALIDA || asist['eventos.SALIDA'];
+        const comidasMap = eventos.comidas || asist['eventos.comidas'] || {};
+
         let horasEfectivas = 0;
-        let entrada = "N/A";
-        let salida = "N/A";
-        let salidaComer = "N/A";
-        let regresoComer = "N/A";
+        let infoEntrada = { hora: "N/A", fecha: "N/A" };
+        let infoSalida = { hora: "N/A", fecha: "N/A" };
         
+        let comidasRegistradas = [];
+        let tiempoTotalComidasDecimal = 0;
+
         let estatusLabel = "A tiempo";
         let colorJornada = "light";
         let diferencia = 0;
         let jornadaAsignadaCalculo = 0;
 
-        if (eventos.ENTRADA) {
-            entrada = eventos.ENTRADA.hora;
-            const hEntradaReal = parseHoraADecimal(entrada);
-            let hSalidaReal;
+        const tsEntrada = entradaReal?.timestamp || entradaReal;
 
-            if (eventos.SALIDA) {
-                salida = eventos.SALIDA.hora;
-                hSalidaReal = parseHoraADecimal(salida);
+        if (tsEntrada) {
+            // 1. Obtener instancias de fecha real para la Entrada
+            const dateEntrada = obtenerDateConTZ(tsEntrada, timeZone);
+            infoEntrada = desglosarTimestamp(tsEntrada, timeZone) || { hora: "N/A", fecha: "N/A" };
+
+            // 2. Obtener instancias de fecha real para la Salida
+            const tsSalida = salidaReal?.timestamp || salidaReal;
+            let dateSalida;
+
+            if (tsSalida) {
+                dateSalida = obtenerDateConTZ(tsSalida, timeZone);
+                infoSalida = desglosarTimestamp(tsSalida, timeZone) || { hora: "N/A", fecha: "N/A" };
             } else {
-                const horaActualLocal = now.toLocaleTimeString("sv-SE", { hour12: false });
-                hSalidaReal = parseHoraADecimal(horaActualLocal);
-                salida = "EN CURSO...";
+                dateSalida = obtenerDateConTZ(now, timeZone);
+                infoSalida = { hora: "EN CURSO...", fecha: dateSalida.toLocaleDateString("sv-SE") };
             }
 
-            if (eventos.COMIDA_INICIO) salidaComer = eventos.COMIDA_INICIO.hora;
-            if (eventos.COMIDA_FIN) regresoComer = eventos.COMIDA_FIN.hora;
+            // CALCULO MAESTRO MULTIDÍA: Diferencia matemática basada en milisegundos reales
+            // (1 hora = 3,600,000 milisegundos)
+            let horasTranscurridasTotales = Math.max(0, (dateSalida - dateEntrada) / 3600000);
+
+            // 3. Procesar las N comidas acumulando sus duraciones reales
+            const listaComidasKeys = Object.keys(comidasMap).sort(); 
+            
+            for (const key of listaComidasKeys) {
+                const itemComida = comidasMap[key];
+                const tsInicioComida = itemComida.COMIDA_INICIO?.timestamp || itemComida.COMIDA_INICIO;
+                const tsFinComida = itemComida.COMIDA_FIN?.timestamp || itemComida.COMIDA_FIN;
+
+                let inicioDesglosado = desglosarTimestamp(tsInicioComida, timeZone) || { hora: "N/A", fecha: "N/A" };
+                let finDesglosado = desglosarTimestamp(tsFinComida, timeZone) || { hora: "N/A", fecha: "N/A" };
+
+                let horasDeEstaComida = 0;
+                const dateInComida = obtenerDateConTZ(tsInicioComida, timeZone);
+                const dateOutComida = obtenerDateConTZ(tsFinComida, timeZone);
+
+                if (dateInComida && dateOutComida) {
+                    // Cálculo multidía también para los descansos en ruta
+                    horasDeEstaComida = Math.max(0, (dateOutComida - dateInComida) / 3600000);
+                    tiempoTotalComidasDecimal += horasDeEstaComida;
+                } else if (dateInComida && !dateOutComida) {
+                    const configComidaActual = asist.config_comidas?.[comidasRegistradas.length] || asist.config_comidas?.[0];
+                    horasDeEstaComida = configComidaActual?.tiempo_comida_max || 1.5;
+                    tiempoTotalComidasDecimal += horasDeEstaComida;
+                    finDesglosado.hora = "EN COMIDA...";
+                }
+
+                comidasRegistradas.push({
+                    identificador: key,
+                    salida_comer: { hora: inicioDesglosado.hora, fecha: inicioDesglosado.fecha },
+                    regreso_comer: { hora: finDesglosado.hora, fecha: finDesglosado.fecha },
+                    duracion_horas: Number(horasDeEstaComida.toFixed(2))
+                });
+            }
 
             // -------------------------------------------------------------
             // CAMINO A: PROCESAMIENTO ESQUEMA LIBRE
             // -------------------------------------------------------------
             if (tipoEsquema === 'LIBRE') {
                 const jornadaMeta = asist.jornada_efectiva || 9.5;
-                const comidaDefault = asist.tiempo_comida_max || 1.5;
                 jornadaAsignadaCalculo = jornadaMeta;
 
-                let tiempoComida = 0;
-                if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
-                    tiempoComida = parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora);
-                } else if (eventos.COMIDA_INICIO && !eventos.COMIDA_FIN) {
-                    tiempoComida = comidaDefault;
-                    regresoComer = "EN COMIDA...";
-                }
-
-                horasEfectivas = Math.max(0, hSalidaReal - hEntradaReal - tiempoComida);
+                // Restamos el acumulado de todas las comidas del tiempo total de viaje
+                horasEfectivas = Math.max(0, horasTranscurridasTotales - tiempoTotalComidasDecimal);
                 let diferenciaOriginal = horasEfectivas - jornadaMeta;
                 diferencia = Number(diferenciaOriginal.toFixed(2));
 
@@ -496,67 +588,74 @@ const getReporteHoras = async (opciones = {}) => {
                 }
             }
             // -------------------------------------------------------------
-            // CAMINO B: PROCESAMIENTO ESQUEMA FIJO
+            // CAMINO B: PROCESAMIENTO ESQUEMA FIJO (Basado en Fechas Reales)
             // -------------------------------------------------------------
             else if (tipoEsquema === 'FIJO') {
-                const hEntradaTeorica = parseHoraADecimal(asist.hora_entrada || "08:00:00");
-                const hSalidaComerTeorica = parseHoraADecimal(asist.hora_salida_comer || "14:00:00");
-                const hRegresoComerTeorica = parseHoraADecimal(asist.hora_regreso_comer || "15:00:00");
-                const hSalidaTeorica = parseHoraADecimal(asist.hora_salida || "17:30:00");
-                const toleranciaHoras = (asist.tolerancia_minutos || 0) / 60;
+                // Instancias completas Date de las configuraciones teóricas oficiales guardadas en la entrada
+                const dateEntradaTeorica = obtenerDateConTZ(asist.hora_entrada, timeZone);
+                const dateSalidaTeorica = obtenerDateConTZ(asist.hora_salida, timeZone);
 
-                const comidaTeorica = hRegresoComerTeorica - hSalidaComerTeorica;
-                jornadaAsignadaCalculo = (hSalidaTeorica - hEntradaTeorica) - comidaTeorica;
+                const dateEntradaReal = obtenerDateConTZ(tsEntrada, timeZone);
+                const dateSalidaReal = dateSalida; // Ya calculado arriba dinámicamente con tsSalida o 'now'
+
+                const toleranceHoras = (asist.tolerancia_minutos || 0) / 60;
+
+                let comidaTeoricaTotal = 0;
+                if (asist.config_comidas && asist.config_comidas.length > 0) {
+                    asist.config_comidas.forEach(c => {
+                        const dateInComidaTeorica = obtenerDateConTZ(c.hora_salida_comer, timeZone);
+                        const dateOutComidaTeorica = obtenerDateConTZ(c.hora_regreso_comer, timeZone);
+                        if (dateInComidaTeorica && dateOutComidaTeorica) {
+                            comidaTeoricaTotal += (dateOutComidaTeorica - dateInComidaTeorica) / 3600000;
+                        }
+                    });
+                } else {
+                    comidaTeoricaTotal = 1.5;
+                }
+
+                // Cálculo oficial de la jornada esperada
+                jornadaAsignadaCalculo = ((dateSalidaTeorica - dateEntradaTeorica) / 3600000) - comidaTeoricaTotal;
 
                 let acumuladoMinutosFaltantes = 0;
                 let flagsFaltasOretardos = [];
 
-                // 1. Evaluar Retardo en la Entrada
-                if (hEntradaReal > (hEntradaTeorica + toleranciaHoras)) {
-                    const minRetardo = Math.round((hEntradaReal - hEntradaTeorica) * 60);
+                // Validación de Retardo (Usa milisegundos absolutos sumando el offset de tolerancia)
+                const dateEntradaConTolerancia = new Date(dateEntradaTeorica.getTime() + (toleranceHoras * 3600000));
+                if (dateEntradaReal > dateEntradaConTolerancia) {
+                    const minRetardo = Math.round((dateEntradaReal - dateEntradaTeorica) / 60000);
                     flagsFaltasOretardos.push(`Retardo (${minRetardo} min)`);
                     acumuladoMinutosFaltantes += minRetardo;
                 }
 
-                // 2. Evaluar exceso en tiempo de comida
-                if (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) {
-                    const comidaReal = parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora);
-                    if (comidaReal > comidaTeorica) {
-                        const minExcesoComida = Math.round((comidaReal - comidaTeorica) * 60);
-                        flagsFaltasOretardos.push(`Exceso Comida (${minExcesoComida} min)`);
-                        acumuladoMinutosFaltantes += minExcesoComida;
-                    }
-                } else if (eventos.COMIDA_INICIO && !eventos.COMIDA_FIN) {
-                    regresoComer = "EN COMIDA...";
+                // Validación de Exceso de Comida
+                if (tiempoTotalComidasDecimal > comidaTeoricaTotal) {
+                    const minExcesoComida = Math.round((tiempoTotalComidasDecimal - comidaTeoricaTotal) * 60);
+                    flagsFaltasOretardos.push(`Exceso Comida (${minExcesoComida} min)`);
+                    acumuladoMinutosFaltantes += minExcesoComida;
                 }
 
-                // 3. Evaluar Salida Anticipada
-                if (!eventos.SALIDA) {
-                    if (hSalidaReal < hSalidaTeorica) {
-                        horasEfectivas = Math.max(0, hSalidaReal - hEntradaReal - (eventos.COMIDA_INICIO ? comidaTeorica : 0));
+                // Asignación de Horas Efectivas Netas Trabajadas
+                horasEfectivas = Math.max(0, horasTranscurridasTotales - tiempoTotalComidasDecimal);
+
+                // Validación de Salida Anticipada por Límites de Fechas
+                if (!tsSalida) {
+                    if (dateSalidaReal < dateSalidaTeorica) {
                         estatusLabel = "EN CURSO...";
                         colorJornada = "light";
                     }
-                } else if (hSalidaReal < hSalidaTeorica) {
-                    const minSalidaAnticipada = Math.round((hSalidaTeorica - hSalidaReal) * 60);
+                } else if (dateSalidaReal < dateSalidaTeorica) {
+                    const minSalidaAnticipada = Math.round((dateSalidaTeorica - dateSalidaReal) / 60000);
                     flagsFaltasOretardos.push(`Salida Temp (${minSalidaAnticipada} min)`);
                     acumuladoMinutosFaltantes += minSalidaAnticipada;
                 }
 
-                // Cómputo físico total de horas en planta
-                const comidaDescontar = (eventos.COMIDA_INICIO && eventos.COMIDA_FIN) 
-                    ? (parseHoraADecimal(eventos.COMIDA_FIN.hora) - parseHoraADecimal(eventos.COMIDA_INICIO.hora))
-                    : (eventos.COMIDA_INICIO ? comidaTeorica : 0);
-                
-                horasEfectivas = Math.max(0, hSalidaReal - hEntradaReal - comidaDescontar);
-
-                // Asignación de saldos del reporte global
+                // Definición de Estatus Global de la Jornada Fija
                 if (acumuladoMinutosFaltantes > 0) {
                     diferencia = Number((-(acumuladoMinutosFaltantes / 60)).toFixed(2));
                     estatusLabel = flagsFaltasOretardos.join(" | ");
                     colorJornada = "danger";
-                } else if (eventos.SALIDA && hSalidaReal > hSalidaTeorica) {
-                    diferencia = Number((hSalidaReal - hSalidaTeorica).toFixed(2));
+                } else if (tsSalida && dateSalidaReal > dateSalidaTeorica) {
+                    diferencia = Number(((dateSalidaReal - dateSalidaTeorica) / 3600000).toFixed(2));
                     estatusLabel = `Extra (${diferencia.toFixed(2)} hrs)`;
                     colorJornada = "success";
                 } else {
@@ -577,12 +676,11 @@ const getReporteHoras = async (opciones = {}) => {
         else if (diferencia < 0) reporteMap[userId].faltantes += Math.abs(diferencia);        
 
         reporteMap[userId].asistencias.push({
-            fecha: asist.fecha,
-            entrada,
-            salida,
-            salida_comer: salidaComer,
-            regreso_comer: regresoComer,
-            total_efectivo: Number(horasEfectivas.toFixed(2)),
+            fecha_registro: asist.fecha, 
+            entrada: infoEntrada,       
+            salida: infoSalida,         
+            comidas_registradas: comidasRegistradas, 
+            total_efectivo: horasEfectivas > 0 ? Number(horasEfectivas.toFixed(2)) : null,
             jornada_asignada: Number(jornadaAsignadaCalculo.toFixed(2)),
             estatus: estatusLabel,
             color: colorJornada
@@ -591,7 +689,7 @@ const getReporteHoras = async (opciones = {}) => {
 
     return Object.values(reporteMap).map(emp => ({
         ...emp,
-        total_horas: Number(emp.total_horas.toFixed(2)),
+        total_horas: emp.total_horas > 0 ? Number(emp.total_horas.toFixed(2)) : null,
         extras: Number(emp.extras.toFixed(2)),
         faltantes: Number(emp.faltantes.toFixed(2))
     }));
@@ -623,7 +721,7 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
         console.error('Error al traer contexto dinámico para el PDF:', error);
     }
 
-    // 3. Ahora sí, construimos el contenido del PDF con la data real de la BD
+    // 1. Construimos el encabezado del PDF
     const contenidoPdf = [
         { text: `REPORTE DE ASISTENCIAS`, style: 'headerTitle' },
         { text: `Empresa: ${nombreEmpresa}`, style: 'headerSubtitleStore' },
@@ -633,19 +731,22 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
 
     // 2. Mapeamos los datos de los empleados a la estructura de pdfmake
     empleados.forEach(emp => {
+        // Validamos si las horas totales son nulas o válidas
+        const totalHorasTxt = emp.total_horas !== null ? `${emp.total_horas} hrs` : 'N/A';
+
         contenidoPdf.push({ text: `Empleado: ${emp.nombre}`, style: 'empName' });
         contenidoPdf.push({ 
-            text: `Horas Totales: ${emp.total_horas} hrs  |  Extras: ${emp.extras} hrs  |  Faltantes: ${emp.faltantes} hrs`, 
+            text: `Horas Totales: ${totalHorasTxt}  |  Extras: ${emp.extras} hrs  |  Faltantes: ${emp.faltantes} hrs`, 
             style: 'empMeta' 
         });
 
         const tablaAsistencias = {
             table: {
                 headerRows: 1,
-                widths: ['*', 'auto','auto','auto', 'auto', 'auto', '*'],
+                widths: ['auto', '*', '*', '*', '*', 'auto', '*'], // Ajuste de proporciones para fechas y horas
                 body: [
                     [
-                        { text: 'Fecha', style: 'tableHeader' },
+                        { text: 'Fecha Reg.', style: 'tableHeader' },
                         { text: 'Entrada', style: 'tableHeader' },
                         { text: 'S. Comer', style: 'tableHeader' },
                         { text: 'R. Comer', style: 'tableHeader' },
@@ -659,13 +760,62 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
         };
 
         emp.asistencias.forEach(asist => {
+            // --- FORMATEO DE ENTRADA ---
+            let entradaCelda = "N/A";
+            if (asist.entrada && asist.entrada.hora !== "N/A") {
+                // Si la fecha de la checada coincide con el día del registro ponemos solo hora, si varía añadimos la fecha abajo
+                entradaCelda = asist.entrada.fecha !== asist.fecha_registro 
+                    ? `${asist.entrada.hora}\n(${asist.entrada.fecha})`
+                    : asist.entrada.hora;
+            }
+
+            // --- FORMATEO DE SALIDA ---
+            let salidaCelda = "N/A";
+            if (asist.salida && asist.salida.hora !== "N/A") {
+                salidaCelda = (asist.salida.hora !== "EN CURSO..." && asist.salida.fecha !== asist.fecha_registro)
+                    ? `${asist.salida.hora}\n(${asist.salida.fecha})`
+                    : asist.salida.hora;
+            }
+
+            // --- MANEJO MULTI-COMIDAS PARA LAS COLUMNAS S.COMER Y R.COMER ---
+            let salidasComerArr = [];
+            let regresosComerArr = [];
+
+            if (asist.comidas_registradas && asist.comidas_registradas.length > 0) {
+                asist.comidas_registradas.forEach(comida => {
+                    // Procesar la salida a comer de este ciclo
+                    if (comida.salida_comer && comida.salida_comer.hora !== "N/A") {
+                        const txtSalida = comida.salida_comer.fecha !== asist.fecha_registro
+                            ? `${comida.salida_comer.hora} (${comida.salida_comer.fecha})`
+                            : comida.salida_comer.hora;
+                        salidasComerArr.push(txtSalida);
+                    }
+
+                    // Procesar el regreso de comer de este ciclo
+                    if (comida.regreso_comer && comida.regreso_comer.hora !== "N/A") {
+                        const txtRegreso = (comida.regreso_comer.hora !== "EN COMIDA..." && comida.regreso_comer.fecha !== asist.fecha_registro)
+                            ? `${comida.regreso_comer.hora} (${comida.regreso_comer.fecha})`
+                            : comida.regreso_comer.hora;
+                        regresosComerArr.push(txtRegreso);
+                    }
+                });
+            }
+
+            // Si no se registraron comidas en absoluto, mostramos el clásico "N/A"
+            const sComerCelda = salidasComerArr.length > 0 ? salidasComerArr.join('\n') : "N/A";
+            const rComerCelda = regresosComerArr.length > 0 ? regresosComerArr.join('\n') : "N/A";
+
+            // Control de texto para el Total Efectivo
+            const totalEfectivoTxt = asist.total_efectivo !== null ? `${asist.total_efectivo} hrs` : 'N/A';
+
+            // Inyectamos la fila procesada a la estructura de la tabla
             tablaAsistencias.table.body.push([
-                { text: asist.fecha, style: 'tableBody' },
-                { text: asist.entrada, style: 'tableBody' },
-                { text: asist.salida_comer, style: 'tableBody' },
-                { text: asist.regreso_comer, style: 'tableBody' },
-                { text: asist.salida, style: 'tableBody' },
-                { text: `${asist.total_efectivo} hrs`, style: 'tableBody' },
+                { text: asist.fecha_registro, style: 'tableBody' },
+                { text: entradaCelda, style: 'tableBody' },
+                { text: sComerCelda, style: 'tableBodyComida' },  // Estilo ajustado para multi-comidas
+                { text: rComerCelda, style: 'tableBodyComida' },  // Estilo ajustado para multi-comidas
+                { text: salidaCelda, style: 'tableBody' },
+                { text: totalEfectivoTxt, style: 'tableBody' },
                 { text: asist.estatus, style: 'tableBody' }
             ]);
         });
@@ -674,13 +824,17 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
     });
 
     const estilosAsistencia = {
-        empName: { fontSize: 12, bold: true, margin: [0, 15, 0, 3] },
-        empMeta: { fontSize: 9, color: '#666', margin: [0, 0, 0, 10] },
-        tableHeader: { fontSize: 8, bold: true, fillColor: '#eeeeee', alignment: 'center' }, // Bajamos a 8
-        tableBody: { fontSize: 8, alignment: 'center' } // Bajamos a 8 para que quepan holgadamente las 7 columnas
+        headerTitle: { fontSize: 16, bold: true, margin: [0, 0, 0, 5], alignment: 'center' },
+        headerSubtitleStore: { fontSize: 10, margin: [0, 2, 0, 2] },
+        headerSubtitleDates: { fontSize: 10, color: '#444', margin: [0, 2, 0, 15] },
+        empName: { fontSize: 11, bold: true, margin: [0, 15, 0, 3] },
+        empMeta: { fontSize: 9, color: '#555', margin: [0, 0, 0, 8] },
+        tableHeader: { fontSize: 8, bold: true, fillColor: '#eeeeee', alignment: 'center', margin: [0, 4, 0, 4] },
+        tableBody: { fontSize: 7.5, alignment: 'center', margin: [0, 3, 0, 3] },
+        tableBodyComida: { fontSize: 7, alignment: 'center', margin: [0, 2, 0, 2] } // Un poco más pequeño por si se listan 2 o más comidas
     };
 
-    // USAMOS AWAIT: Esperamos a que el utilitario genere el Buffer completo
+    // Generamos y retornamos el Buffer final del PDF utilizando tu manejador pdfMake
     return await pdfGenerator.createReporteBuffer(contenidoPdf, estilosAsistencia);
 };
 
