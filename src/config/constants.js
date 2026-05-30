@@ -10,6 +10,17 @@ const RECURSOS = {
     CONFIGURACION: 'CONFIGURACION'*/
 };
 
+const MAPEO_MODULOS = {
+    "CHECADOR": {
+        "colecciones": ["TIENDAS", "ASISTENCIAS", "USUARIOS"],
+        "acciones": ["VER", "LISTAR", "CREAR"]
+    },
+    "ENTREGAS": {
+        "colecciones": ["TIENDAS", "ENTREGAS", "VEHICULOS", "COLONIAS"],
+        "acciones": ["VER", "LISTAR","CREAR"]
+    }
+};
+
 /**
  * ACCIONES: Define qué se puede hacer dentro de cada recurso.
  * Esto mantiene la consistencia en el JSON de permisos.
@@ -51,6 +62,7 @@ const DB_CONFIG = {
 
 module.exports = {
     RECURSOS,
+    MAPEO_MODULOS,
     ACCIONES,
     ROLES,
     SUPER_ROLES,

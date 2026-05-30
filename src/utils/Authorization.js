@@ -1,4 +1,4 @@
-const { SUPER_ROLES,RECURSOS, ACCIONES } = require('../config/constants');
+const { SUPER_ROLES,RECURSOS, ACCIONES, MAPEO_MODULOS } = require('../config/constants');
 
 class Authorization {
     /**
@@ -28,13 +28,35 @@ class Authorization {
     static hasPermission(user, recurso, accion) {
         if (this.isAdmin(user)) return true;
         if (!user || !user.permisos) return false;
+        console.log(recurso)
 
-        if (!RECURSOS[recurso]) {
-            return false;
+        // Normalizamos a mayúsculas para evitar discrepancias de strings ("tiendas" vs "TIENDAS")
+        const recursoUpper = recurso.toUpperCase();
+        const accionUpper = accion.toUpperCase();
+
+        // 3. REVISIÓN ESTRICTA: Si el usuario tiene el recurso exacto en su JSON (ej: permisos.TIENDAS)
+        if (user.permisos[recursoUpper] && user.permisos[recursoUpper].includes(accionUpper)) {
+            return true;
         }
 
-        const userPermissions = user.permisos[recurso] || [];
-        return userPermissions.includes(accion);
+        // 4. 🧠 REVISIÓN POR MÓDULO LOGÍSTICO (Bypass Inteligente para lectura interna)
+        // Extraemos los módulos reales que tiene el usuario en su JSON (ej: ["CHECADOR", "ENTREGAS"])
+        const modulosDelUsuario = Object.keys(user.permisos);
+
+        for (const modulo of modulosDelUsuario) {
+            const configModulo = MAPEO_MODULOS[modulo.toUpperCase()];
+            
+            // Si el módulo existe en el diccionario y contiene la colección que se está pidiendo
+            if (configModulo && configModulo.colecciones.includes(recursoUpper)) {
+                // Y la acción solicitada es de lectura pura (VER o LISTAR)
+                if (configModulo.acciones.includes(accionUpper)) {
+                    return true; // ¡Pase autorizado por pertenecer al módulo lógico!
+                }
+            }
+        }
+
+        // 5. Si no cumple ninguna de las condiciones anteriores, se deniega de forma segura
+        return false;
     }
 }
 
