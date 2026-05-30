@@ -799,15 +799,28 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
                     { text: totalEfectivoTxt, style: 'tableBodyEfectivo' }
                 ]);
 
-                // 2. Añadimos la fila de Estatus con colSpan explícito y seguro
-                let colorFondoEstatus = '#f8f9fa'; 
+                // =========================================================================
+                // 🎨 CORRECCIÓN DINÁMICA DE COLOR DE BANNER (VERDE PARA "A TIEMPO" / "EXTRA")
+                // =========================================================================
+                let colorFondoEstatus = '#f8f9fa'; // Gris por defecto (para "En Curso" o "Light")
                 let colorTextoEstatus = '#3c4043';
-                if (asist.color === 'success') {
-                    colorFondoEstatus = '#e6f4ea'; 
-                    colorTextoEstatus = '#137333';
-                } else if (asist.color === 'danger') {
-                    colorFondoEstatus = '#fce8e6'; 
-                    colorTextoEstatus = '#c5221f';
+
+                // Evaluamos tanto por el parámetro asignado como por el texto del estatus
+                const esAsistenciaCorrecta = asist.color === 'success' || 
+                                            asist.estatus === 'A tiempo' || 
+                                            asist.estatus.includes('Extra');
+
+                const esAsistenciaIncidencia = asist.color === 'danger' || 
+                                            asist.estatus.includes('Retardo') || 
+                                            asist.estatus.includes('Exceso') || 
+                                            asist.estatus.includes('Faltante');
+
+                if (esAsistenciaCorrecta) {
+                    colorFondoEstatus = '#e6f4ea'; // Verde Google (Éxito)
+                    colorTextoEstatus = '#137333'; // Texto Verde Oscuro
+                } else if (esAsistenciaIncidencia) {
+                    colorFondoEstatus = '#fce8e6'; // Rojo Google (Incidencia)
+                    colorTextoEstatus = '#c5221f'; // Texto Rojo Oscuro
                 }
 
                 cuerpoTabla.push([
@@ -818,7 +831,7 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
                         fillColor: colorFondoEstatus,
                         color: colorTextoEstatus
                     },
-                    {}, {}, {}, {} // Forzamos las 4 celdas restantes requeridas por el colSpan de 5 columnas
+                    {}, {}, {}, {} 
                 ]);
             });
         }
