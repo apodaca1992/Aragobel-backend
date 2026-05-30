@@ -34,28 +34,37 @@ class Authorization {
         const recursoUpper = recurso.toUpperCase();
         const accionUpper = accion.toUpperCase();
 
-        // 3. REVISIÓN ESTRICTA: Si el usuario tiene el recurso exacto en su JSON (ej: permisos.TIENDAS)
-        if (user.permisos[recursoUpper] && user.permisos[recursoUpper].includes(accionUpper)) {
-            return true;
+        // 2. REVISIÓN DIRECTA DEL MÓDULO PADRE
+        // Si el recurso consultado es el módulo en sí (ej: recurso="CHECADOR")
+        if (user.permisos[recursoUpper]) {
+            const accionesModulo = user.permisos[recursoUpper].acciones_modulo || [];
+            if (accionesModulo.includes(accionUpper)) {
+                return true;
+            }
         }
 
-        // 4. 🧠 REVISIÓN POR MÓDULO LOGÍSTICO (Bypass Inteligente para lectura interna)
-        // Extraemos los módulos reales que tiene el usuario en su JSON (ej: ["CHECADOR", "ENTREGAS"])
+        // 3. 🧠 REVISIÓN DINÁMICA POR HERENCIA (Ecosistema de Recursos Internos)
+        // Extraemos las llaves de los módulos que trae el usuario en su JWT (ej: ["CHECADOR", "ENTREGAS"])
         const modulosDelUsuario = Object.keys(user.permisos);
 
-        for (const modulo of modulosDelUsuario) {
-            const configModulo = MAPEO_MODULOS[modulo.toUpperCase()];
+        for (const nombreModulo of modulosDelUsuario) {
+            const configModulo = user.permisos[nombreModulo];
             
-            // Si el módulo existe en el diccionario y contiene la colección que se está pidiendo
-            if (configModulo && configModulo.colecciones.includes(recursoUpper)) {
-                // Y la acción solicitada es de lectura pura (VER o LISTAR)
-                if (configModulo.acciones.includes(accionUpper)) {
-                    return true; // ¡Pase autorizado por pertenecer al módulo lógico!
+            // Verificamos si este módulo tiene asignados recursos internos
+            const recursosInternos = configModulo.recursos_internos || [];
+
+            // Si el recurso que pide la API (ej: "TIENDAS") está mapeado dentro de este módulo...
+            if (recursosInternos.map(r => r.toUpperCase()).includes(recursoUpper)) {
+                
+                // ...entonces hereda las acciones permitidas para este módulo
+                const accionesAutorizadas = configModulo.acciones_modulo || [];
+                if (accionesAutorizadas.includes(accionUpper)) {
+                    return true; // ¡Pase autorizado dinámicamente!
                 }
             }
         }
 
-        // 5. Si no cumple ninguna de las condiciones anteriores, se deniega de forma segura
+        // 4. Si no cumple ningún criterio, el acceso se bloquea de manera segura
         return false;
     }
 }

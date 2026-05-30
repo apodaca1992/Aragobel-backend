@@ -10,16 +10,6 @@ const RECURSOS = {
     CONFIGURACION: 'CONFIGURACION'*/
 };
 
-const MAPEO_MODULOS = {
-    "CHECADOR": {
-        "colecciones": ["TIENDAS", "ASISTENCIAS", "USUARIOS"],
-        "acciones": ["VER", "LISTAR", "CREAR"]
-    },
-    "ENTREGAS": {
-        "colecciones": ["TIENDAS", "ENTREGAS", "VEHICULOS", "COLONIAS"],
-        "acciones": ["VER", "LISTAR","CREAR"]
-    }
-};
 
 /**
  * ACCIONES: Define qué se puede hacer dentro de cada recurso.
@@ -62,7 +52,6 @@ const DB_CONFIG = {
 
 module.exports = {
     RECURSOS,
-    MAPEO_MODULOS,
     ACCIONES,
     ROLES,
     SUPER_ROLES,

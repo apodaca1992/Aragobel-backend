@@ -18,10 +18,20 @@ const rolSchema = Joi.object({
             'string.empty': 'La descripción del rol es obligatorio',
             'string.max': 'La descripción del rol no puede exceder los 100 caracteres'
         }),
-
     permisos: Joi.object().pattern(
+        // La llave del objeto sigue siendo el nombre del módulo (ej: CHECADOR, ENTREGAS)
         Joi.string().valid(...LISTA_RECURSOS), 
-        Joi.array().items(Joi.string().valid(...LISTA_ACCIONES))
+        
+        // El valor ahora es un OBJETO con las dos nuevas propiedades obligatorias
+        Joi.object({
+            acciones_modulo: Joi.array()
+                .items(Joi.string().valid(...LISTA_ACCIONES))
+                .required(),
+                
+            recursos_internos: Joi.array()
+                .items(Joi.string()) // Aquí van las colecciones (TIENDAS, ASISTENCIAS, etc.)
+                .required()
+        }).required()
     )
     .required()
     .messages({
