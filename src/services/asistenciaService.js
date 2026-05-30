@@ -181,7 +181,9 @@ const create = async (data) => {
             }
         }
 
+        // 🚨 CANDADOS EXCLUSIVOS PARA ESQUEMA FIJO 🚨
         if (tipoEsquemaActual === 'FIJO') {
+            // Candado A: Validar horarios de salida a comer
             if (tipoUpper === 'COMIDA_INICIO' && comidasAsignadas.length > 0) {
                 const indexSiguienteComida = listaComidasKeys.length; 
                 const comidaPactada = comidasAsignadas[indexSiguienteComida];
@@ -191,6 +193,17 @@ const create = async (data) => {
                     if (ahoraTimestamp.seconds < comidaPactada.hora_salida_comer.seconds) {
                         throw new AppError(`Aún no es tu hora asignada para salir a: ${comidaPactada.nombre}.`, 403);
                     }
+                }
+            }
+
+            // Candado B: 🛠️ VALIDAR HORA DE SALIDA FINAL ASIGNADA 🛠️
+            if (tipoUpper === 'SALIDA' && jornadaExistente.hora_salida) {
+                const ahoraTimestamp = admin.firestore.Timestamp.now();
+                // Si los segundos actuales son menores a los pactados en la base de datos para salir
+                if (ahoraTimestamp.seconds < jornadaExistente.hora_salida.seconds) {
+                    // Convertimos el timestamp guardado a formato legible para avisarle al usuario
+                    const salidaOficialStr = jornadaExistente.hora_salida.toDate().toLocaleTimeString("es-MX", { timeZone, hour: '2-digit', minute: '2-digit' });
+                    throw new AppError(`No puedes registrar tu salida todavía. Tu horario oficial de salida es a las ${salidaOficialStr}.`, 403);
                 }
             }
         }
