@@ -682,6 +682,9 @@ const parseHoraADecimal = (horaStr) => {
     return hrs + (mins / 60) + (secs / (secs ? 3600 : 1)); 
 };
 
+// =========================================================================
+// 📄 GENERACIÓN DE REPORTE EN PDF (CORREGIDO Y BLINDADO AL 100%)
+// =========================================================================
 const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
     const db = admin.firestore();
     
@@ -689,13 +692,11 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
     let nombreTienda = 'Sucursal';
 
     try {
-        // Disparamos ambas promesas en paralelo para ahorrar la mitad del tiempo de espera
         const [empresaDoc, tiendaDoc] = await Promise.all([
             id_empresa ? db.collection('empresas').doc(id_empresa).get() : null,
             id_tienda ? db.collection('tiendas').doc(id_tienda).get() : null
         ]);
 
-        // Asignamos los nombres directamente si los documentos existen
         if (empresaDoc?.exists) nombreEmpresa = empresaDoc.data().nombre || nombreEmpresa;
         if (tiendaDoc?.exists) nombreTienda = tiendaDoc.data().nombre || nombreTienda;
 
@@ -703,121 +704,172 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
         console.error('Error al traer contexto dinámico para el PDF:', error);
     }
 
-    // 1. Construimos el encabezado del PDF
-    const contenidoPdf = [
-        { text: `REPORTE DE ASISTENCIAS`, style: 'headerTitle' },
-        { text: `Empresa: ${nombreEmpresa}`, style: 'headerSubtitleStore' },
-        { text: `Tienda: ${nombreTienda}`, style: 'headerSubtitleStore' },
-        { text: `Periodo: ${periodo.inicio} al ${periodo.fin}`, style: 'headerSubtitleDates' }
-    ];
+    const raizPdf = [];
 
-    // 2. Mapeamos los datos de los empleados a la estructura de pdfmake
-    empleados.forEach(emp => {
-        // Validamos si las horas totales son nulas o válidas
-        const totalHorasTxt = emp.total_horas !== null ? `${emp.total_horas} hrs` : 'N/A';
-
-        contenidoPdf.push({ text: `Empleado: ${emp.nombre}`, style: 'empName' });
-        contenidoPdf.push({ 
-            text: `Horas Totales: ${totalHorasTxt}  |  Extras: ${emp.extras} hrs  |  Faltantes: ${emp.faltantes} hrs`, 
-            style: 'empMeta' 
-        });
-
-        const tablaAsistencias = {
-            table: {
-                headerRows: 1,
-                widths: ['auto', '*', '*', '*', '*', 'auto', '*'], // Ajuste de proporciones para fechas y horas
-                body: [
-                    [
-                        { text: 'Fecha Reg.', style: 'tableHeader' },
-                        { text: 'Entrada', style: 'tableHeader' },
-                        { text: 'S. Comer', style: 'tableHeader' },
-                        { text: 'R. Comer', style: 'tableHeader' },
-                        { text: 'Salida', style: 'tableHeader' },
-                        { text: 'Total Efectivo', style: 'tableHeader' },
-                        { text: 'Estatus', style: 'tableHeader' }
-                    ]
-                ]
+    // Encabezado principal del archivo
+    raizPdf.push({ text: `REPORTE DE ASISTENCIAS`, style: 'headerTitle' });
+    raizPdf.push({
+        columns: [
+            {
+                text: [
+                    { text: 'Empresa: ', bold: true }, `${nombreEmpresa}\n`,
+                    { text: 'Tienda: ', bold: true }, `${nombreTienda}`
+                ],
+                style: 'headerSubtitleStore'
             },
-            layout: 'lightHorizontalLines'
-        };
-
-        emp.asistencias.forEach(asist => {
-            // --- FORMATEO DE ENTRADA ---
-            let entradaCelda = "N/A";
-            if (asist.entrada && asist.entrada.hora !== "N/A") {
-                // Si la fecha de la checada coincide con el día del registro ponemos solo hora, si varía añadimos la fecha abajo
-                entradaCelda = asist.entrada.fecha !== asist.fecha_registro 
-                    ? `${asist.entrada.hora}\n(${asist.entrada.fecha})`
-                    : asist.entrada.hora;
+            {
+                text: `Periodo: ${periodo.inicio || periodo} al ${periodo.fin || ''}\nGenerado el: ${new Date().toLocaleDateString('es-MX')}`,
+                style: 'headerSubtitleDates',
+                alignment: 'right'
             }
-
-            // --- FORMATEO DE SALIDA ---
-            let salidaCelda = "N/A";
-            if (asist.salida && asist.salida.hora !== "N/A") {
-                salidaCelda = (asist.salida.hora !== "EN CURSO..." && asist.salida.fecha !== asist.fecha_registro)
-                    ? `${asist.salida.hora}\n(${asist.salida.fecha})`
-                    : asist.salida.hora;
-            }
-
-            // --- MANEJO MULTI-COMIDAS PARA LAS COLUMNAS S.COMER Y R.COMER ---
-            let salidasComerArr = [];
-            let regresosComerArr = [];
-
-            if (asist.comidas_registradas && asist.comidas_registradas.length > 0) {
-                asist.comidas_registradas.forEach(comida => {
-                    // Procesar la salida a comer de este ciclo
-                    if (comida.salida_comer && comida.salida_comer.hora !== "N/A") {
-                        const txtSalida = comida.salida_comer.fecha !== asist.fecha_registro
-                            ? `${comida.salida_comer.hora} (${comida.salida_comer.fecha})`
-                            : comida.salida_comer.hora;
-                        salidasComerArr.push(txtSalida);
-                    }
-
-                    // Procesar el regreso de comer de este ciclo
-                    if (comida.regreso_comer && comida.regreso_comer.hora !== "N/A") {
-                        const txtRegreso = (comida.regreso_comer.hora !== "EN COMIDA..." && comida.regreso_comer.fecha !== asist.fecha_registro)
-                            ? `${comida.regreso_comer.hora} (${comida.regreso_comer.fecha})`
-                            : comida.regreso_comer.hora;
-                        regresosComerArr.push(txtRegreso);
-                    }
-                });
-            }
-
-            // Si no se registraron comidas en absoluto, mostramos el clásico "N/A"
-            const sComerCelda = salidasComerArr.length > 0 ? salidasComerArr.join('\n') : "N/A";
-            const rComerCelda = regresosComerArr.length > 0 ? regresosComerArr.join('\n') : "N/A";
-
-            // Control de texto para el Total Efectivo
-            const totalEfectivoTxt = asist.total_efectivo !== null ? `${asist.total_efectivo} hrs` : 'N/A';
-
-            // Inyectamos la fila procesada a la estructura de la tabla
-            tablaAsistencias.table.body.push([
-                { text: asist.fecha_registro, style: 'tableBody' },
-                { text: entradaCelda, style: 'tableBody' },
-                { text: sComerCelda, style: 'tableBodyComida' },  // Estilo ajustado para multi-comidas
-                { text: rComerCelda, style: 'tableBodyComida' },  // Estilo ajustado para multi-comidas
-                { text: salidaCelda, style: 'tableBody' },
-                { text: totalEfectivoTxt, style: 'tableBody' },
-                { text: asist.estatus, style: 'tableBody' }
-            ]);
-        });
-
-        contenidoPdf.push(tablaAsistencias);
+        ],
+        margin: [0, 0, 0, 15]
     });
 
+    // Renderizado estricto por cada empleado
+    for (const emp of empleados) {
+        const totalHorasTxt = emp.total_horas !== null ? `${emp.total_horas} hrs` : 'N/A';
+
+        // Estructura limpia de la tabla de asistencias (5 columnas fijas que suman 100%)
+        const cuerpoTabla = [
+            [
+                { text: 'Fecha Reg.', style: 'tableHeader' },
+                { text: 'Entrada', style: 'tableHeader' },
+                { text: 'Descansos / Comidas (S a R)', style: 'tableHeader' },
+                { text: 'Salida Final', style: 'tableHeader' },
+                { text: 'Efectivo', style: 'tableHeader' }
+            ]
+        ];
+
+        if (emp.asistencias && emp.asistencias.length > 0) {
+            emp.asistencias.forEach(asist => {
+                
+                // Formateo de Entrada
+                let entradaCelda = [];
+                if (asist.entrada && asist.entrada.hora !== "N/A") {
+                    entradaCelda.push({ text: asist.entrada.hora, bold: true });
+                    if (asist.entrada.fecha !== asist.fecha_registro) {
+                        entradaCelda.push({ text: `\n(${asist.entrada.fecha})`, fontSize: 6.5, color: '#70757a' });
+                    }
+                } else {
+                    entradaCelda = { text: "N/A", color: '#9aa0a6' };
+                }
+
+                // Formateo de Salida Final
+                let salidaCelda = [];
+                if (asist.salida && asist.salida.hora !== "N/A") {
+                    salidaCelda.push({ text: asist.salida.hora, bold: true });
+                    if (asist.salida.hora !== "EN CURSO..." && asist.salida.fecha !== asist.fecha_registro) {
+                        salidaCelda.push({ text: `\n(${asist.salida.fecha})`, fontSize: 6.5, color: '#70757a' });
+                    }
+                } else {
+                    salidaCelda = { text: "N/A", color: '#9aa0a6' };
+                }
+
+                // Formateo del Bloque de Comidas
+                let comidasContenido = [];
+                if (asist.comidas_registradas && asist.comidas_registradas.length > 0) {
+                    asist.comidas_registradas.forEach((comida, index) => {
+                        let salidaHora = comida.salida_comer?.hora || "N/A";
+                        let regresoHora = comida.regreso_comer?.hora || "N/A";
+                        let desfaseTexto = (comida.salida_comer?.fecha && comida.salida_comer.fecha !== asist.fecha_registro)
+                            ? ` (${comida.salida_comer.fecha})` : "";
+
+                        comidasContenido.push({
+                            text: [
+                                { text: `C${index + 1}: `, color: '#1a73e8', bold: true, fontSize: 7 },
+                                { text: `${salidaHora} a ${regresoHora}`, bold: true, fontSize: 7.5 },
+                                { text: desfaseTexto, fontSize: 6.5, color: '#70757a' }
+                            ],
+                            margin: [0, 1, 0, 1]
+                        });
+                    });
+                } else {
+                    comidasContenido.push({ text: "Sin comidas", color: '#9aa0a6', fontSize: 7.5 });
+                }
+
+                const totalEfectivoTxt = asist.total_efectivo !== null ? `${asist.total_efectivo} hrs` : 'N/A';
+
+                // 1. Añadimos la fila normal de datos numéricos
+                cuerpoTabla.push([
+                    { text: asist.fecha_registro, style: 'tableBodyDate' },
+                    { text: entradaCelda, style: 'tableBody' },
+                    { stack: comidasContenido, style: 'tableBodyComida' }, 
+                    { text: salidaCelda, style: 'tableBody' },
+                    { text: totalEfectivoTxt, style: 'tableBodyEfectivo' }
+                ]);
+
+                // 2. Añadimos la fila de Estatus con colSpan explícito y seguro
+                let colorFondoEstatus = '#f8f9fa'; 
+                let colorTextoEstatus = '#3c4043';
+                if (asist.color === 'success') {
+                    colorFondoEstatus = '#e6f4ea'; 
+                    colorTextoEstatus = '#137333';
+                } else if (asist.color === 'danger') {
+                    colorFondoEstatus = '#fce8e6'; 
+                    colorTextoEstatus = '#c5221f';
+                }
+
+                cuerpoTabla.push([
+                    { 
+                        text: `Estatus / Incidencias:  ${asist.estatus}`, 
+                        colSpan: 5, 
+                        style: 'tableEstatusRow',
+                        fillColor: colorFondoEstatus,
+                        color: colorTextoEstatus
+                    },
+                    {}, {}, {}, {} // Forzamos las 4 celdas restantes requeridas por el colSpan de 5 columnas
+                ]);
+            });
+        }
+
+        // Agrupamos el bloque del empleado sin usar caracteres o emojis pesados que rompan las fuentes estándar
+        raizPdf.push({
+            stack: [
+                { text: `Empleado: ${emp.nombre}`, style: 'empName' },
+                { text: `Horas Totales: ${totalHorasTxt}   |   Extras: ${emp.extras} hrs   |   Faltantes: ${emp.faltantes} hrs`, style: 'empMeta' },
+                {
+                    table: {
+                        headerRows: 1,
+                        widths: ['15%', '15%', '40%', '15%', '15%'], // Ajuste de proporciones para dar más espacio a las comidas
+                        body: cuerpoTabla
+                    },
+                    layout: {
+                        hLineWidth: (i, node) => (i === 0 || i === node.table.body.length) ? 1 : 0.5,
+                        vLineWidth: (i, node) => {
+                            // Ocultamos las líneas verticales internas en las filas pares (que son las filas de estatus con colSpan)
+                            // para evitar que se pinte el bug de rejilla desalineada
+                            if (i > 0 && i < node.table.widths.length && node.table.body[node.table.body.length - 1]?.colSpan === 5) {
+                                return 0;
+                            }
+                            return 0.5;
+                        },
+                        hLineColor: () => '#dadce0',
+                        vLineColor: () => '#dadce0'
+                    },
+                    margin: [0, 6, 0, 0]
+                }
+            ],
+            margin: [0, 15, 0, 10],
+            unbreakable: true
+        });
+    }
+
     const estilosAsistencia = {
-        headerTitle: { fontSize: 16, bold: true, margin: [0, 0, 0, 5], alignment: 'center' },
-        headerSubtitleStore: { fontSize: 10, margin: [0, 2, 0, 2] },
-        headerSubtitleDates: { fontSize: 10, color: '#444', margin: [0, 2, 0, 15] },
-        empName: { fontSize: 11, bold: true, margin: [0, 15, 0, 3] },
-        empMeta: { fontSize: 9, color: '#555', margin: [0, 0, 0, 8] },
-        tableHeader: { fontSize: 8, bold: true, fillColor: '#eeeeee', alignment: 'center', margin: [0, 4, 0, 4] },
-        tableBody: { fontSize: 7.5, alignment: 'center', margin: [0, 3, 0, 3] },
-        tableBodyComida: { fontSize: 7, alignment: 'center', margin: [0, 2, 0, 2] } // Un poco más pequeño por si se listan 2 o más comidas
+        headerTitle: { fontSize: 16, bold: true, margin: [0, 0, 0, 8], alignment: 'left', color: '#1a73e8' },
+        headerSubtitleStore: { fontSize: 10, color: '#3c4043', lineHeight: 1.2 },
+        headerSubtitleDates: { fontSize: 9, color: '#5f6368' },
+        empName: { fontSize: 12, bold: true, color: '#202124', margin: [0, 0, 0, 3] },
+        empMeta: { fontSize: 9, color: '#5f6368', margin: [0, 0, 0, 6] },
+        tableHeader: { fontSize: 8, bold: true, fillColor: '#f1f3f4', alignment: 'center', margin: [0, 5, 0, 5], color: '#202124' },
+        tableBodyDate: { fontSize: 8, bold: true, alignment: 'center', margin: [0, 5, 0, 5] },
+        tableBody: { fontSize: 8, alignment: 'center', margin: [0, 5, 0, 5] },
+        tableBodyEfectivo: { fontSize: 8, bold: true, alignment: 'center', margin: [0, 5, 0, 5] },
+        tableBodyComida: { fontSize: 7.5, alignment: 'center', margin: [0, 4, 0, 4] },
+        tableEstatusRow: { fontSize: 8, bold: true, margin: [6, 4, 6, 4], alignment: 'left' }
     };
 
-    // Generamos y retornamos el Buffer final del PDF utilizando tu manejador pdfMake
-    return await pdfGenerator.createReporteBuffer(contenidoPdf, estilosAsistencia);
+    return await pdfGenerator.createReporteBuffer(raizPdf, estilosAsistencia);
 };
 
 module.exports = { getAll, getById, create, update, remove, getReporteHoras, generarPdfReporte };
