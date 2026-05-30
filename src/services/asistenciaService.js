@@ -92,7 +92,6 @@ const create = async (data) => {
     // 🔍 LOCALIZACIÓN OPTIMIZADA DE JORNADA / CANDADO DE DUPLICADOS EN ENTRADA
     // =========================================================================
     if (tipoUpper === 'ENTRADA') {
-        // 1. Verificar si hay una jornada abierta y colgada actualmente
         const checklistActiva = await db.collection('asistencias')
             .where('id_usuario', '==', data.id_usuario)
             .where('status_jornada', '==', 'ACTIVA')
@@ -103,14 +102,12 @@ const create = async (data) => {
             throw new AppError('No puedes registrar una entrada porque ya tienes una jornada activa abierta.', 400);
         }
 
-        // 2. Obtener el esquema del usuario para poder realizar la validación de duplicado exacto
         const usuario = await Firestore.findByPk('usuarios', data.id_usuario);
         if (!usuario) throw new AppError('Usuario no encontrado', 404);
 
         const tiendaConfig = usuario.tiendas_asignadas?.find(t => t.id_tienda === data.id_tienda);
         const esquema = (tiendaConfig?.tipo_esquema || "LIBRE").toUpperCase();
 
-        // 3. 🚨 CANDADO DE DUPLICADOS HISTÓRICOS POR FECHA Y ESQUEMA 🚨
         const chequeoDuplicado = await db.collection('asistencias')
             .where('fecha', '==', fechaHoy)
             .where('id_usuario', '==', data.id_usuario)
@@ -124,9 +121,7 @@ const create = async (data) => {
             throw new AppError(`Ya cuentas con un registro de asistencia generado para el día de hoy (${fechaHoy}) bajo el esquema ${esquema}.`, 400);
         }
 
-        // Si pasa ambos filtros, se permite inicializar el nuevo documento descriptor
         docRef = db.collection('asistencias').doc();
-        // Guardamos temporalmente la información del usuario en el scope para evitar re-consultar abajo
         data._usuarioCache = usuario;
         data._tiendaConfigCache = tiendaConfig;
     } else {
@@ -162,7 +157,7 @@ const create = async (data) => {
         throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
-    // --- 🚨 CANDADOS DE FLUJO DE NEGOCIO (ESTRUCTURA DE MAPA CLAVE-VALOR) 🚨 ---
+    // --- 🚨 CANDADOS DE FLUJO DE NEGOCIO 🚨 ---
     if (jornadaExistente) {
         const tipoEsquemaActual = (jornadaExistente.tipo_esquema || "LIBRE").toUpperCase();
         const comidasMap = jornadaExistente.eventos?.comidas || {};
@@ -222,13 +217,8 @@ const create = async (data) => {
 
     const geoPointUbicacion = new admin.firestore.GeoPoint(userLat, userLng);
 
-    let tipoEsquemaResp = jornadaExistente?.tipo_esquema || "LIBRE";
-    let statusJornadaResp = jornadaExistente?.status_jornada || "ACTIVA";
-    let fechaJornadaResp = jornadaExistente?.fecha || fechaHoy;
-
     // --- CASO A: REGISTRO DE ENTRADA ---
     if (tipoUpper === 'ENTRADA') {
-        // Recuperamos las configuraciones guardadas previamente en la validación de arriba
         const tiendaConfig = data._tiendaConfigCache;
         const esquema = (tiendaConfig?.tipo_esquema || "LIBRE").toUpperCase();
         
@@ -236,10 +226,6 @@ const create = async (data) => {
         updateData.fecha = fechaHoy;
         updateData.status_jornada = "ACTIVA";
         updateData.tipo_esquema = esquema;
-
-        tipoEsquemaResp = esquema;
-        statusJornadaResp = "ACTIVA";
-        fechaJornadaResp = fechaHoy;
 
         if (esquema === 'LIBRE') {
             updateData.jornada_efectiva = tiendaConfig?.jornada_efectiva ?? 9.5;
@@ -266,7 +252,6 @@ const create = async (data) => {
             }
 
             updateData.tolerancia_minutos = tiendaConfig?.tolerancia_minutos ?? 0;
-
             updateData.hora_entrada = crearTimestampConDesfase(fechaHoy, horaEntradaStr, 0, timeZone); 
             updateData.hora_salida = crearTimestampConDesfase(fechaHoy, horaSalidaStr, diasDesfaseSalida, timeZone); 
 
@@ -286,7 +271,6 @@ const create = async (data) => {
             comidas: {}
         };
 
-        // Eliminar las variables temporales de caché antes de guardar en Firestore
         delete data._usuarioCache;
         delete data._tiendaConfigCache;
 
@@ -342,36 +326,21 @@ const create = async (data) => {
             ubicacion: geoPointUbicacion
         };
 
-        statusJornadaResp = "COMPLETADA";
-
         await docRef.update(updateData);
     }
 
     // =========================================================================
-    // 🧼 SANITIZACIÓN DE LA RESPUESTA JSON (FRONTEND FRIENDLY)
+    // 🔄 LECTURA DIRECTA DE FIRESTORE POST-CAMBIO (DATO REAL AL 100%)
     // =========================================================================
-    const fechaISO = new Date().toISOString(); 
+    const finalDocSnap = await docRef.get();
+    const documentoReal = finalDocSnap.data();
 
     return {
         id: docRef.id,
-        id_usuario: data.id_usuario,
-        nombre_usuario: data.nombre_usuario,
-        id_tienda: data.id_tienda,
-        id_empresa: data.id_empresa,
-        activo: 1,
-        status_jornada: statusJornadaResp,
-        tipo_esquema: tipoEsquemaResp,
-        fecha: fechaJornadaResp,
-        updatedAt: fechaISO,
-        ...(tipoUpper === 'ENTRADA' && {
-            createdAt: fechaISO,
-            config_comidas: updateData.config_comidas,
-            ...(tipoEsquemaResp === 'FIJO' && { tolerancia_minutos: updateData.tolerancia_minutos }),
-            ...(tipoEsquemaResp === 'LIBRE' && { journey_efectiva: updateData.jornada_efectiva })
-        }),
+        ...documentoReal,
         evento_registrado: {
             tipo: tipoUpper,
-            timestamp: fechaISO,
+            timestamp: new Date().toISOString(),
             ubicacion: `${userLat.toFixed(6)},${userLng.toFixed(6)}`
         }
     };
