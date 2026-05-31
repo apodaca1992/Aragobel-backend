@@ -5,6 +5,8 @@ package-lock.json
 
 # Configuración y Variables de Entorno (¡MUY IMPORTANTE!)
 .env
+.env.prod
+.env.qa
 .env.local
 .env.development.local
 .env.test.local
