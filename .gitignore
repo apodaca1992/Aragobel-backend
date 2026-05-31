@@ -35,3 +35,6 @@ Thumbs.db
 
 # Firebase credentials
 config/serviceAccountKey.json
+
+# Ignorar las credenciales de Firebase, pero permitir el script de migración
+respaldo-firebase/*.json
