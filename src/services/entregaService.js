@@ -2,6 +2,7 @@ const Firestore = require('../utils/firestoreUtils'); // Importamos el objeto co
 const { db, admin } = require('../../config/firebase');
 const AppError = require('../utils/appError');
 const logger = require('../utils/logger');
+const geoUtils = require('../utils/geoUtils');
 const pdfGenerator = require('../utils/pdfGenerator');
 
 const getAll = async (opciones = {}) => {
@@ -54,18 +55,34 @@ const getById = async (id, user) => {
 }
 
 const create = async (data) => {
+    // Buscar la tienda primero para garantizar el uso de su zona horaria
+    if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
+    const tienda = await Firestore.findByPk('tiendas', data.id_tienda);
+    if (!tienda) throw new AppError('La tienda no existe', 404);
+
+    // Extraemos la zona horaria de la configuración de la tienda
+    const timeZone = tienda.configuracion_asistencia?.time_zone || "America/Mazatlan";
+    // Inyectamos la zona horaria en el objeto de la entrega para que el reporte sepa cómo leerla
+    //data.time_zone = timeZone;
+
     // 2. Lógica de Negocio: Si fecha_venta es 'TODAY' o no viene, inyectamos la fecha del servidor
     // Esto garantiza que el cliente no tenga que calcularla
     if (typeof data.fecha_venta === 'string' && data.fecha_venta.startsWith('TODAY')) {
-        // --- 2. VALIDACIÓN DE GEOCERCA (NUEVA) ---
-        if (!data.id_tienda) throw new AppError('No se especificó la tienda', 400);
+        data.fecha_venta = new Date().toLocaleString("sv-SE", { timeZone }).split(' ')[0]; 
+    }
 
-        const tienda = await Firestore.findByPk('tiendas', data.id_tienda);
-        if (!tienda) throw new AppError('La tienda no existe', 404);
+    // --- VALIDACIÓN DE GEOCERCA ---
+    const tiendaLat = tienda.ubicacion._latitude || tienda.ubicacion.lat;
+    const tiendaLng = tienda.ubicacion._longitude || tienda.ubicacion.lng;
+    const userLat = parseFloat(data.ubicacion.lat);
+    const userLng = parseFloat(data.ubicacion.lng);
 
-        data.fecha_venta = new Date().toLocaleString("sv-SE", { 
-            timeZone: tienda.configuracion_asistencia.time_zone 
-        }).split(' ')[0]; 
+    const distancia = geoUtils.calcularDistanciaMetros(userLat, userLng, tiendaLat, tiendaLng);
+    const RADIO_MAXIMO = tienda.configuracion_asistencia?.radio_maximo_metros || 200;
+
+    if (distancia > RADIO_MAXIMO) {
+        logger.warn(`Intento de agregar una entrega fuera de rango: Usuario a ${Math.round(distancia)} metros`);
+        throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
     }
 
     // --- VALIDACIÓN DE DUPLICADOS ---
@@ -84,6 +101,10 @@ const create = async (data) => {
         throw new AppError(`Ya existe un registro de con folio ${data.folio} para hoy`, 400);
     }  
 
+    if (data.ubicacion) {
+        delete data.ubicacion;
+    }
+
     return await Firestore.create('entregas',data);
 }
 
@@ -101,16 +122,50 @@ const update = async (id, data, user) => {
         logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar entrega ${id}`);
         throw new AppError('No tienes permiso para editar esta entrega', 403);
     }
+    
+    // Buscar la tienda primero para garantizar el uso de su zona horaria
+    // 🌟 OPTIMIZACIÓN: Si el front-end no manda id_tienda, lo recuperamos del registro existente en la BD
+    const idTiendaEfectivo = data.id_tienda || entregaExistente.id_tienda;
+    if (!idTiendaEfectivo) throw new AppError('No se especificó la tienda para esta entrega', 400);
+    const tienda = await Firestore.findByPk('tiendas', idTiendaEfectivo);
+    if (!tienda) throw new AppError('La tienda no existe', 404);
+
+    // Extraemos la zona horaria de la configuración de la tienda
+    const timeZone = tienda.configuracion_asistencia?.time_zone || "America/Mazatlan";
+    
+    // --- VALIDACIÓN DE GEOCERCA ---
+    const tiendaLat = tienda.ubicacion._latitude || tienda.ubicacion.lat;
+    const tiendaLng = tienda.ubicacion._longitude || tienda.ubicacion.lng;
+    const userLat = parseFloat(data.ubicacion.lat);
+    const userLng = parseFloat(data.ubicacion.lng);
+
+    const distancia = geoUtils.calcularDistanciaMetros(userLat, userLng, tiendaLat, tiendaLng);
+    const RADIO_MAXIMO = tienda.configuracion_asistencia?.radio_maximo_metros || 200;
+
+    if (distancia > RADIO_MAXIMO) {
+        logger.warn(`Intento de actualizar una entrega fuera de rango: Usuario a ${Math.round(distancia)} metros`);
+        throw new AppError(`Estás demasiado lejos de la tienda (${Math.round(distancia)}m).`, 403);
+    }
+
+    // 🌟 CORRECCIÓN 2: MANEJO DE ESTAMPAS DE TIEMPO CON EL SERVIDOR DE ADMIN (EVITA DESFASES)
+    const ahoraServidor = admin.firestore.Timestamp.now();
 
     // --- LÓGICA AUTOMÁTICA PARA FECHA DE SALIDA ---
     // Si el cliente envía estatus 2 (En camino) y la entrega no tenía fecha de salida previa
     if (data.estatus === 2 && !entregaExistente.fec_salidapedido) {
-        data.fec_salidapedido = new Date(); // Estampa de tiempo oficial del servidor
+        data.fec_salidapedido = ahoraServidor; // Estampa de tiempo oficial del servidor
     }
 
     // 2. ENTREGA (Estatus 3: Entregado)
     if (data.estatus === 3 && !entregaExistente.fec_entregapedido) {
-        data.fec_entregapedido = new Date();
+        data.fec_entregapedido = ahoraServidor;
+    }
+
+    // Agregamos la última actualización general
+    data.updatedAt = ahoraServidor;
+
+    if (data.ubicacion) {
+        delete data.ubicacion;
     }
 
     const resultadoUpdate = await Firestore.update('entregas',id,data);
@@ -148,8 +203,24 @@ const getReporteEntregas = async (opciones = {}) => {
     const entregas = await Firestore.findAll('entregas', opciones);
     const reporteMap = {};
 
+    // 🌟 HELPER MAESTRO: Importado de tu service de asistencias para fulminar el desfase UTC
+    const obtenerDateConTZ = (timestamp, timeZone = "America/Mazatlan") => {
+        if (!timestamp) return null;
+        let dateObj;
+        if (typeof timestamp.toDate === 'function') dateObj = timestamp.toDate();
+        else if (timestamp instanceof Date) dateObj = timestamp;
+        else if (timestamp._seconds || timestamp.seconds) dateObj = new Date((timestamp._seconds || timestamp.seconds) * 1000);
+        else if (typeof timestamp === 'string' && !isNaN(Date.parse(timestamp))) dateObj = new Date(timestamp);
+        else return null;
+
+        return new Date(dateObj.toLocaleString("en-US", { timeZone }));
+    };
+
     for (const entrega of entregas) {
         const repartidorNombre = entrega.nombre_repartidor || 'Sin Asignar';
+
+        // Leemos la zona horaria guardada en el documento (o usamos Mazatlán por defecto)
+        const timeZone = entrega.time_zone || "America/Mazatlan";
         
         if (!reporteMap[repartidorNombre]) {
             reporteMap[repartidorNombre] = {
@@ -159,9 +230,10 @@ const getReporteEntregas = async (opciones = {}) => {
             };
         }
 
-        const fCreacion = entrega.createdAt?.toDate ? entrega.createdAt.toDate() : (entrega.createdAt ? new Date(entrega.createdAt) : null);
-        const fSalida = entrega.fec_salidapedido?.toDate ? entrega.fec_salidapedido.toDate() : (entrega.fec_salidapedido ? new Date(entrega.fec_salidapedido) : null);
-        const fEntrega = entrega.fec_entregapedido?.toDate ? entrega.fec_entregapedido.toDate() : (entrega.fec_entregapedido ? new Date(entrega.fec_entregapedido) : null);
+        // 🌟 CORRECCIÓN: Ahora procesamos los Timestamps usando el conversor de Zona Horaria
+        const fCreacion = obtenerDateConTZ(entrega.createdAt, timeZone);
+        const fSalida = obtenerDateConTZ(entrega.fec_salidapedido, timeZone);
+        const fEntrega = obtenerDateConTZ(entrega.fec_entregapedido, timeZone);
 
         let tEsperaAsignacion = "N/A";
         let tDuracionViaje = "N/A";
@@ -180,6 +252,7 @@ const getReporteEntregas = async (opciones = {}) => {
                 : `${totalMinutos.toFixed(0)} min`;
         }
 
+       // 🌟 CORRECCIÓN: Los formateadores ahora renderizan el string exacto calculado sin alterar la fecha
         const formatearHora = (date) => date ? date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A';
         const formatearFecha = (date) => date ? date.toLocaleDateString('sv-SE') : 'N/A';
 
