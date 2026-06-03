@@ -10,7 +10,9 @@
     "emuladores": "npx firebase emulators:start --project demo-aragobel --import ./data-local --export-on-exit ./data-local",
     "start:prod": "cp .env.prod .env && echo '=> Cargado entorno PRODUCCIÓN' && npm start",
     "start:qa": "cp .env.qa .env && echo '=> Cargado entorno QA' && npm start",
-    "db:sync": "node respaldo-firebase/migrar.js"
+    "db:sync": "node respaldo-firebase/migrar.js",
+    "deploy:qa": "node deploy-qa.js",
+    "deploy:prod": "node deploy-prod.js"
   },
   "keywords": [],
   "author": "",
