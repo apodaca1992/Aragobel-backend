@@ -1,7 +1,10 @@
-// respaldo-firebase/migrar.js
+// se necesita primero logearme en la terminal con 
+// npx firebase login
+// npm run db:sync
 const admin = require('firebase-admin');
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process'); // Para ejecutar comandos de consola automáticamente
 
 // Rutas a las credenciales
 const prodAccountKey = path.join(__dirname, 'prod-credentials.json');
@@ -27,8 +30,48 @@ async function ejecutarMigracion() {
             throw new Error('Faltan los archivos JSON de credenciales en respaldo-firebase/.');
         }
 
+        // ---------------------------------------------------------------------
+        // 🔄 PASO 0: CLONACIÓN AUTOMÁTICA DE ÍNDICES COMPUESTOS
+        // ---------------------------------------------------------------------
+        console.log('📐 Sincronizando índices compuestos de Firestore...');
+        
+        // Leemos los IDs de proyecto directamente de tus archivos JSON de credenciales
+        const prodProjectId = JSON.parse(fs.readFileSync(prodAccountKey)).project_id;
+        const qaProjectId = JSON.parse(fs.readFileSync(qaAccountKey)).project_id;
+        const indexesFile = path.join(__dirname, 'firestore.indexes.json');
+        
+        // Creamos una configuración temporal para que Firebase CLI reconozca el destino de despliegue
+        const configTemporal = path.join(__dirname, 'firebase.json');
+        fs.writeFileSync(configTemporal, JSON.stringify({
+            firestore: {
+                indexes: "firestore.indexes.json"
+            }
+        }, null, 2));
+
+        console.log(`   • Exportando índices de Producción (${prodProjectId})...`);
+        // Autenticación automática usando la llave JSON de producción
+        execSync(`npx firebase firestore:indexes --project ${prodProjectId} > ${indexesFile}`, { 
+            stdio: 'inherit',
+            env: { ...process.env, GOOGLE_APPLICATION_CREDENTIALS: prodAccountKey }
+        });
+
+        console.log(`   • Importando y desplegando índices en QA (${qaProjectId})...`);
+        // 🌟 SOLUCIÓN DEFINITIVA: Quitamos el objeto 'env' para que Firebase CLI use de forma nativa tu sesión
+        // activa de la terminal (tu usuario administrador de Firebase en la Mac).
+        execSync(`npx firebase deploy --only firestore:indexes --project ${qaProjectId} --config ${configTemporal}`, { 
+            stdio: 'inherit'
+        });
+        
+        // Limpiamos los archivos temporales para dejar la carpeta impecable
+        if (fs.existsSync(indexesFile)) fs.unlinkSync(indexesFile);
+        if (fs.existsSync(configTemporal)) fs.unlinkSync(configTemporal);
+        
+        console.log('✅ Índices compuestos replicados y construyéndose en QA.');
+
+        // ---------------------------------------------------------------------
         // 1. INICIALIZAR APP DE PRODUCCIÓN Y LEER DATOS
-        console.log('📥 Conectando y extrayendo datos de Firebase PRODUCCIÓN...');
+        // ---------------------------------------------------------------------
+        console.log('\n📥 Conectando y extrayendo datos de Firebase PRODUCCIÓN...');
         const appProd = admin.initializeApp({
             credential: admin.credential.cert(prodAccountKey)
         }, 'prod-app');
@@ -49,12 +92,13 @@ async function ejecutarMigracion() {
             });
         }
         
-        // Cerrar la app de producción para liberar memoria
         await appProd.delete();
         console.log('💾 Datos de producción cargados en memoria con éxito.');
 
+        // ---------------------------------------------------------------------
         // 2. INICIALIZAR APP DE QA E INYECTAR DATOS
-        console.log('📤 Conectando e insertando datos en Firebase QA...');
+        // ---------------------------------------------------------------------
+        console.log('\n📤 Conectando e insertando datos en Firebase QA...');
         const appQa = admin.initializeApp({
             credential: admin.credential.cert(qaAccountKey)
         }, 'qa-app');
@@ -67,11 +111,9 @@ async function ejecutarMigracion() {
 
             console.log(`   • Escribiendo colección: ${nombreCol} (${documentos.length} docs)...`);
             
-            // Usamos batches de Firestore para escribir de forma masiva y ultra rápida
             let batch = dbQa.batch();
             let contador = 0;
 
-            // 🌟 CORREGIDO: Cambiado "de" por "of" aquí abajo
             for (const doc of documentos) {
                 const docRef = dbQa.collection(nombreCol).doc(doc.id);
                 batch.set(docRef, doc.data);
@@ -92,7 +134,7 @@ async function ejecutarMigracion() {
         }
 
         await appQa.delete();
-        console.log('\n✅ ¡ÉXITO TOTAL! Tu base de datos de QA es ahora un clon exacto de Producción.');
+        console.log('\n✅ ¡ÉXITO TOTAL! Tu base de datos e índices de QA son ahora un clon exacto de Producción.');
 
     } catch (error) {
         console.error('\n❌ ERROR DURANTE LA MIGRACIÓN:', error.message);
