@@ -11,8 +11,8 @@
     "start:prod": "cp .env.prod .env && echo '=> Cargado entorno PRODUCCIÓN' && npm start",
     "start:qa": "cp .env.qa .env && echo '=> Cargado entorno QA' && npm start",
     "db:sync": "node respaldo-firebase/migrar.js",
-    "deploy:qa": "node deploy-qa.js",
-    "deploy:prod": "node deploy-prod.js"
+    "deploy:qa": "node deploy.js qa",
+    "deploy:prod": "node deploy.js prod"
   },
   "keywords": [],
   "author": "",
