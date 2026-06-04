@@ -1,17 +1,28 @@
 {
-  "name": "Aragobel-backend",
+  "name": "ControlFacil-backend",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
+    "// start": "Arranca el servidor usando el archivo .env genérico actual",
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "emuladores": "npx firebase emulators:start --project demo-aragobel --import ./data-local --export-on-exit ./data-local",
+
+    "// start:prod": "ENTORNO LOCAL: Copia el .env.prod al .env y arranca el servidor en modo PRODUCCIÓN",
     "start:prod": "cp .env.prod .env && echo '=> Cargado entorno PRODUCCIÓN' && npm start",
+    "// start:qa": "ENTORNO LOCAL: Copia el .env.qa al .env y arranca el servidor en modo QA",
     "start:qa": "cp .env.qa .env && echo '=> Cargado entorno QA' && npm start",
-    "db:sync": "node respaldo-firebase/migrar.js",
+
+    "// db:sync:qa": "PELIGRO: Trae los datos de producción y SOBREESCRIBE la base de datos de QA",
+    "db:sync:qa": "node respaldo-firebase/migrar.js to-qa",
+    "// db:sync:prod": "CRÍTICO: Sube los catálogos/configuraciones de QA hacia la base de datos de Producción",
+    "db:sync:prod": "node respaldo-firebase/migrar.js to-prod",
+    
+    "// deploy:qa": "Despliega en Cloud Run QA limitando costos (máx 2 instancias)",
     "deploy:qa": "node deploy.js qa",
+    "// deploy:prod": "Despliega en Cloud Run Producción con alta disponibilidad (máx 5 instancias)",
     "deploy:prod": "node deploy.js prod"
   },
   "keywords": [],
