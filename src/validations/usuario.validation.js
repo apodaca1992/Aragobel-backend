@@ -24,6 +24,18 @@ const usuarioSchema = Joi.object({
             'any.required': 'El nombre del usuario es un campo requerido',
             'string.max': 'El nombre del usuario no puede exceder los 100 caracteres'
         }),
+    nombre_completo: Joi.string()
+        .max(300)
+        .messages({
+            'any.required': 'El nombre_completo del usuario es un campo requerido',
+            'string.max': 'El nombre_completo del usuario no puede exceder los 100 caracteres'
+        }),
+    nombre_completo_search: Joi.string()
+        .max(300)
+        .messages({
+            'any.required': 'El nombre_completo_search del usuario es un campo requerido',
+            'string.max': 'El nombre_completo_search del usuario no puede exceder los 100 caracteres'
+        }),
     usuario: Joi.string()
         .max(100)
         .required()
@@ -31,6 +43,14 @@ const usuarioSchema = Joi.object({
             'string.empty': 'El usuario es obligatorio',
             'any.required': 'El usuario es un campo requerido',
             'string.max': 'El usuario no puede exceder los 100 caracteres'
+        }),
+    usuario_search: Joi.string()
+        .max(100)
+        .required()
+        .messages({
+            'string.empty': 'El usuario_search es obligatorio',
+            'any.required': 'El usuario_search es un campo requerido',
+            'string.max': 'El usuario_search no puede exceder los 100 caracteres'
         }),
     email: Joi.string()
         .max(100)
