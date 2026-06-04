@@ -47,8 +47,12 @@ const create = async (datos) => {
 }
 
 const update = async (id, data, user) => {
-    const usuarioExistente = await Firestore.findByPk('usuarios',id);
-    if (!usuarioExistente) {
+    const permitirInactivos = data && data.activo === 1;
+
+    // Pasamos dinámicamente el resultado de nuestra condición (true o false)
+    const registroExistente = await Firestore.findByPk('usuarios', id, permitirInactivos);
+    
+    if (!registroExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`El usuario '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
@@ -56,7 +60,7 @@ const update = async (id, data, user) => {
     }
 
     // 2. Validar que la usuario le pertenezca a la empresa del usuario
-    if (usuarioExistente.id_empresa !== user.id_empresa) {
+    if (registroExistente.id_empresa !== user.id_empresa) {
         logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar usuario ${id}`);
         throw new AppError('No tienes permiso para editar el usuario', 403);
     }
@@ -93,7 +97,7 @@ const update = async (id, data, user) => {
     const resultadoUpdate = await Firestore.update('usuarios',id,data);
 
     return {
-        ...usuarioExistente, // Trae id, activo, createdAt, etc.
+        ...registroExistente, // Trae id, activo, createdAt, etc.
         ...resultadoUpdate  // Sobrescribe los campos cambiados y trae el nuevo updatedAt
     };
 };

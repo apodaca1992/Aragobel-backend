@@ -37,8 +37,12 @@ const create = async (data) => {
 }
 
 const update = async (id, data) => {
-    const rolExistente = await Firestore.findByPk('roles',id);
-    if (!rolExistente) {
+    const permitirInactivos = data && data.activo === 1;
+
+    // Pasamos dinámicamente el resultado de nuestra condición (true o false)
+    const registroExistente = await Firestore.findByPk('roles', id, permitirInactivos);
+    
+    if (!registroExistente) {
         const error = new AppError(`No se encontró el rol con ID: ${id}`);
         error.statusCode = 404; // Not Found
         throw error;

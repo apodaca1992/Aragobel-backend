@@ -360,8 +360,12 @@ const create = async (data) => {
 };
 
 const update = async (id, data, user) => {
-    const asistenciaExistente = await Firestore.findByPk('asistencias',id);
-    if (!asistenciaExistente) {
+    const permitirInactivos = data && data.activo === 1;
+
+    // Pasamos dinámicamente el resultado de nuestra condición (true o false)
+    const registroExistente = await Firestore.findByPk('asistencias', id, permitirInactivos);
+    
+    if (!registroExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`La asistencia '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
@@ -369,7 +373,7 @@ const update = async (id, data, user) => {
     }
 
     // 2. Validar que la tienda le pertenezca a la empresa del usuario
-    if (asistenciaExistente.id_empresa !== user.id_empresa) {
+    if (registroExistente.id_empresa !== user.id_empresa) {
         logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar asistencia ${id}`);
         throw new AppError('No tienes permiso para editar esta asistencia', 403);
     }

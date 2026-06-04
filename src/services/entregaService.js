@@ -109,8 +109,12 @@ const create = async (data) => {
 }
 
 const update = async (id, data, user) => {
-    const entregaExistente = await Firestore.findByPk('entregas',id);
-    if (!entregaExistente) {
+    const permitirInactivos = data && data.activo === 1;
+
+    // Pasamos dinámicamente el resultado de nuestra condición (true o false)
+    const registroExistente = await Firestore.findByPk('entregas', id, permitirInactivos);
+    
+    if (!registroExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`La entrega '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
@@ -118,14 +122,14 @@ const update = async (id, data, user) => {
     }
 
     // 2. Validar que la entrega le pertenezca a la empresa del usuario
-    if (entregaExistente.id_empresa !== user.id_empresa) {
+    if (registroExistente.id_empresa !== user.id_empresa) {
         logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar entrega ${id}`);
         throw new AppError('No tienes permiso para editar esta entrega', 403);
     }
     
     // Buscar la tienda primero para garantizar el uso de su zona horaria
     // 🌟 OPTIMIZACIÓN: Si el front-end no manda id_tienda, lo recuperamos del registro existente en la BD
-    const idTiendaEfectivo = data.id_tienda || entregaExistente.id_tienda;
+    const idTiendaEfectivo = data.id_tienda || registroExistente.id_tienda;
     if (!idTiendaEfectivo) throw new AppError('No se especificó la tienda para esta entrega', 400);
     const tienda = await Firestore.findByPk('tiendas', idTiendaEfectivo);
     if (!tienda) throw new AppError('La tienda no existe', 404);
@@ -152,12 +156,12 @@ const update = async (id, data, user) => {
 
     // --- LÓGICA AUTOMÁTICA PARA FECHA DE SALIDA ---
     // Si el cliente envía estatus 2 (En camino) y la entrega no tenía fecha de salida previa
-    if (data.estatus === 2 && !entregaExistente.fec_salidapedido) {
+    if (data.estatus === 2 && !registroExistente.fec_salidapedido) {
         data.fec_salidapedido = ahoraServidor; // Estampa de tiempo oficial del servidor
     }
 
     // 2. ENTREGA (Estatus 3: Entregado)
-    if (data.estatus === 3 && !entregaExistente.fec_entregapedido) {
+    if (data.estatus === 3 && !registroExistente.fec_entregapedido) {
         data.fec_entregapedido = ahoraServidor;
     }
 
@@ -171,7 +175,7 @@ const update = async (id, data, user) => {
     const resultadoUpdate = await Firestore.update('entregas',id,data);
 
     return {
-        ...entregaExistente, // Trae id, activo, createdAt, etc.
+        ...registroExistente, // Trae id, activo, createdAt, etc.
         ...resultadoUpdate  // Sobrescribe los campos cambiados y trae el nuevo updatedAt
     };
 };

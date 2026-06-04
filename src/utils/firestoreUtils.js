@@ -1,4 +1,5 @@
 const { db } = require('../../config/firebase');
+const admin = require('firebase-admin');
 
 /**
  * Función auxiliar privada para convertir Timestamps de Firebase a ISO Strings
@@ -153,12 +154,20 @@ const Firestore = {
     /**
      * (Opcional) Busca un documento directamente por su ID (UUID)
      */
-    findByPk: async (coleccion, id) => {
+    findByPk: async (coleccion, id, incluirInactivos = false) => {
         const doc = await db.collection(coleccion).doc(id).get();
-        // Verificamos que el documento exista Y que esté activo
-        if (!doc.exists || doc.data().activo === 0) {
+        
+        // 1. Si el documento ni siquiera existe en Firebase, retornamos null
+        if (!doc.exists) {
             return null;
         }
+        
+        // 2. Si NO se indicó explícitamente incluir inactivos y el registro está dado de baja (activo === 0), retornamos null
+        if (!incluirInactivos && doc.data().activo === 0) {
+            return null;
+        }
+        
+        // 3. Si existe y pasa las condiciones, formateamos y retornamos los datos
         return formatData({ id: doc.id, ...doc.data() });
     },
 
@@ -194,12 +203,29 @@ const Firestore = {
      */
     update: async (coleccion, id, datos) => {
         const docRef = db.collection(coleccion).doc(id);
+        
+        // ⚡ Procesamos los datos entrantes para limpiar los campos null
+        const datosProcesados = {};
+        
+        Object.keys(datos).forEach(key => {
+            if (datos[key] === null) {
+                // Si el valor es null, le decimos a Firestore que BORRE el campo por completo
+                datosProcesados[key] = admin.firestore.FieldValue.delete();
+            } else {
+                // Si tiene cualquier otro valor, se queda intacto
+                datosProcesados[key] = datos[key];
+            }
+        });
+
         const updateData = {
-            ...datos,
+            ...datosProcesados,
             updatedAt: new Date()
         };
+
         await docRef.update(updateData);
-        return formatData({ id, ...updateData });
+        
+        // Al formatear para la respuesta de la API, removemos el campo para que Angular reciba el objeto limpio
+        return formatData({ id, ...datos }); 
     },
     
     /**

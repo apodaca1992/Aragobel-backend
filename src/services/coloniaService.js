@@ -27,8 +27,12 @@ const getById = async (id,user) => {
 const create = async (data) => await Firestore.create('colonias',data);
 
 const update = async (id, data, user) => {
-    const coloniaExistente = await Firestore.findByPk('colonias',id);
-    if (!coloniaExistente) {
+    const permitirInactivos = data && data.activo === 1;
+
+    // Pasamos dinámicamente el resultado de nuestra condición (true o false)
+    const registroExistente = await Firestore.findByPk('colonias', id, permitirInactivos);
+    
+    if (!registroExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`La colonia '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
@@ -36,7 +40,7 @@ const update = async (id, data, user) => {
     }
 
     // 2. Validar que la tienda le pertenezca a la empresa del usuario
-    if (coloniaExistente.id_empresa !== user.id_empresa) {
+    if (registroExistente.id_empresa !== user.id_empresa) {
         logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar la colonia ${id}`);
         throw new AppError('No tienes permiso para editar esta colonia', 403);
     }
@@ -44,7 +48,7 @@ const update = async (id, data, user) => {
     const resultadoUpdate = await Firestore.update('colonias',id,data);
 
     return {
-        ...coloniaExistente, // Trae id, activo, createdAt, etc.
+        ...registroExistente, // Trae id, activo, createdAt, etc.
         ...resultadoUpdate  // Sobrescribe los campos cambiados y trae el nuevo updatedAt
     };
 };

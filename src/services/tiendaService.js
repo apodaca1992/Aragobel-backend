@@ -35,8 +35,12 @@ const create = async (data) => {
 }
 
 const update = async (id, data, user) => {
-    const tiendaExistente = await Firestore.findByPk('tiendas',id);
-    if (!tiendaExistente) {
+    const permitirInactivos = data && data.activo === 1;
+
+    // Pasamos dinámicamente el resultado de nuestra condición (true o false)
+    const registroExistente = await Firestore.findByPk('tiendas', id, permitirInactivos);
+    
+    if (!registroExistente) {
         // Lanzamos un error de negocio claro
         const error = new AppError(`La tienda '${id}' no existe en el sistema.`);
         error.statusCode = 400; // Bad Request
@@ -44,7 +48,7 @@ const update = async (id, data, user) => {
     }
 
     // 2. Validar que la tienda le pertenezca a la empresa del usuario
-    if (tiendaExistente.id_empresa !== user.id_empresa) {
+    if (registroExistente.id_empresa !== user.id_empresa) {
         logger.warn(`Intento de edición NO AUTORIZADO: Usuario ${user.id} intentó editar tienda ${id}`);
         throw new AppError('No tienes permiso para editar esta tienda', 403);
     }
@@ -52,7 +56,7 @@ const update = async (id, data, user) => {
     const resultadoUpdate = await Firestore.update('tiendas',id,data);
 
     return {
-        ...tiendaExistente, // Trae id, activo, createdAt, etc.
+        ...registroExistente, // Trae id, activo, createdAt, etc.
         ...resultadoUpdate  // Sobrescribe los campos cambiados y trae el nuevo updatedAt
     };
 };
