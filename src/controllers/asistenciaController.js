@@ -179,3 +179,19 @@ exports.descargarReportePdf = catchAsync(async (req, res, next) => {
     // ENVIAR EL ARCHIVO: Al ser un buffer, usamos res.send() en lugar de .pipe()
     res.send(pdfBuffer);
 });
+
+// =========================================================================
+// 🔄 NUEVO ENDPOINT: CONSULTA SECUENCIAL DE JORNADA ACTUAL POR TIENDA
+// =========================================================================
+exports.getJornadaActual = catchAsync(async (req, res, next) => {
+    // Cambiamos params por query 👈
+    const { id_usuario, id_tienda } = req.query;
+
+    // Ejecutamos la lógica secuencial que busca en la base de datos (Paso 1 y Paso 2)
+    const estatusAsistencia = await asistenciaService.getEstatusEnTienda(id_usuario, id_tienda);
+
+    return res.status(200).json({
+        status: 'success',
+        data: estatusAsistencia // Retornará el documento correspondiente o null si está limpio
+    });
+});

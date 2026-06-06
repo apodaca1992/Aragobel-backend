@@ -889,4 +889,93 @@ const generarPdfReporte = async (empleados, periodo, id_tienda, id_empresa) => {
     return await pdfGenerator.createReporteBuffer(raizPdf, estilosAsistencia);
 };
 
-module.exports = { getAll, getById, create, update, remove, getReporteHoras, generarPdfReporte };
+/**
+ * Recupera cualquier jornada activa global de un usuario (para resiliencia de login/F5)
+ */
+const getJornadaActivaByUser = async (idUsuario, idEmpresa) => {
+    if (!idUsuario) {
+        throw new AppError('El identificador del usuario es obligatorio.', 400);
+    }
+
+    const querySnapshot = await db.collection('asistencias')
+        .where('id_usuario', '==', idUsuario)
+        .where('id_empresa', '==', idEmpresa)
+        .where('status_jornada', '==', 'ACTIVA')
+        .where('activo', '==', 1)
+        .limit(1)
+        .get();
+
+    if (querySnapshot.empty) {
+        return null; 
+    }
+
+    const docActivo = querySnapshot.docs[0];
+    return {
+        id: docActivo.id,
+        ...docActivo.data()
+    };
+};
+
+/**
+ * Consulta secuencial para obtener el estado de asistencia actual en una sucursal específica
+ */
+const getEstatusEnTienda = async (idUsuario, idTienda) => {
+    if (!idUsuario || !idTienda) {
+        throw new AppError('El id_usuario and el id_tienda son obligatorios.', 400);
+    }
+
+    // --- PASO 1: Buscar jornada 'ACTIVA' actual en esta tienda (Prioridad Máxima) ---
+    const qActiva = await db.collection('asistencias')
+        .where('id_usuario', '==', idUsuario)
+        .where('id_tienda', '==', idTienda)
+        .where('status_jornada', '==', 'ACTIVA')
+        .where('activo', '==', 1)
+        .limit(1)
+        .get();
+
+    if (!qActiva.empty) {
+        const docActivo = qActiva.docs[0];
+        logger.info(`[Estatus Tienda] Jornada ACTIVA encontrada para usuario ${idUsuario} en tienda ${idTienda}`);
+        return {
+            id: docActivo.id,
+            ...docActivo.data(),
+            __origen_busqueda: 'PASO_1_ACTIVA'
+        };
+    }
+
+    // --- PASO 2: Si no hay activa, buscar si ya cerró turno el día de hoy (TODAY) ---
+    const tienda = await Firestore.findByPk('tiendas', idTienda);
+    if (!tienda) {
+        throw new AppError('La tienda especificada no existe.', 404);
+    }
+    const timeZone = tienda.configuracion_asistencia?.time_zone || "America/Mazatlan";
+
+    // Formatear la fecha local actual de la tienda (YYYY-MM-DD)
+    const fechaHoyTienda = new Date().toLocaleString("sv-SE", { 
+        timeZone: timeZone 
+    }).split(' ')[0];
+
+    const qHoy = await db.collection('asistencias')
+        .where('id_usuario', '==', idUsuario)
+        .where('id_tienda', '==', idTienda)
+        .where('fecha', '==', fechaHoyTienda)
+        .where('activo', '==', 1)
+        .limit(1)
+        .get();
+
+    if (!qHoy.empty) {
+        const docHoy = qHoy.docs[0];
+        logger.info(`[Estatus Tienda] Jornada de HOY (${fechaHoyTienda}) existente/completada para usuario ${idUsuario}`);
+        return {
+            id: docHoy.id,
+            ...docHoy.data(),
+            __origen_busqueda: 'PASO_2_TODAY'
+        };
+    }
+
+    // --- PASO 3: Sucursal sin registros el día de hoy ---
+    logger.info(`[Estatus Tienda] Día limpio para usuario ${idUsuario} en tienda ${idTienda}`);
+    return null; 
+};
+
+module.exports = { getAll, getById, create, update, remove, getReporteHoras, generarPdfReporte, getJornadaActivaByUser, getEstatusEnTienda};
