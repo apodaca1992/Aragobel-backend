@@ -5,8 +5,7 @@ const fs = require('fs');
 const { execSync } = require('child_process');
 
 async function ejecutarMigracion() {
-    // 🌟 1. LEER LA DIRECCIÓN DE LA MIGRACIÓN
-    // Los valores aceptados serán 'to-qa' (Prod -> QA) o 'to-prod' (QA -> Prod)
+    // 1. LEER LA DIRECCIÓN DE LA MIGRACIÓN
     const direccion = (process.argv[2] || '').toLowerCase();
 
     if (direccion !== 'to-qa' && direccion !== 'to-prod') {
@@ -38,7 +37,7 @@ async function ejecutarMigracion() {
             throw new Error(`Faltan los archivos de credenciales JSON en las rutas especificadas.`);
         }
 
-        // 🌟 2. DETERMINAR QUIÉN ES ORIGEN Y QUIÉN DESTINO DINÁMICAMENTE
+        // 2. DETERMINAR QUIÉN ES ORIGEN Y QUIÉN DESTINO DINÁMICAMENTE
         const esHaciaProd = direccion === 'to-prod';
         
         const rutaOrigen = esHaciaProd ? rutaQA : rutaProd;
@@ -47,10 +46,18 @@ async function ejecutarMigracion() {
         const nombreOrigen = esHaciaProd ? 'QA' : 'PRODUCCIÓN';
         const nombreDestino = esHaciaProd ? 'PRODUCCIÓN' : 'QA';
 
+        // 🌟 NUEVO: Leer la bandera directamente desde tu bloque del archivo .env
+        const soloIndices = process.env.FIRESTORE_INDEXES_ONLY === 'true';
+
         const projectIdOrigen = JSON.parse(fs.readFileSync(rutaOrigen)).project_id;
         const projectIdDestino = JSON.parse(fs.readFileSync(rutaDestino)).project_id;
 
-        console.log(`🚀 Iniciando clonación nativa de Firestore [${nombreOrigen} ➡️  ${nombreDestino}]...`);
+        // Cambiamos el título en consola según lo configurado en el .env
+        if (soloIndices) {
+            console.log(`📐 Modo Estructural (.env): Sincronizando ÚNICAMENTE ÍNDICES [${nombreOrigen} ➡️  ${nombreDestino}]...`);
+        } else {
+            console.log(`🚀 Iniciando clonación nativa completa de Firestore [${nombreOrigen} ➡️  ${nombreDestino}]...`);
+        }
 
         // ---------------------------------------------------------------------
         // 🔄 PASO 0: CLONACIÓN AUTOMÁTICA DE ÍNDICES COMPUESTOS
@@ -75,6 +82,12 @@ async function ejecutarMigracion() {
         if (fs.existsSync(indexesFile)) fs.unlinkSync(indexesFile);
         if (fs.existsSync(configTemporal)) fs.unlinkSync(configTemporal);
         console.log('✅ Índices compuestos replicados con éxito.');
+
+        // 🌟 NUEVO: Si en el .env pusiste FIRESTORE_INDEXES_ONLY=true, cortamos aquí de forma segura
+        if (soloIndices) {
+            console.log(`\n✅ ¡PROCESO TERMINADO POR CONFIGURACIÓN DEL .ENV! Los índices de ${nombreDestino} se actualizaron sin alterar datos.`);
+            return; 
+        }
 
         // ---------------------------------------------------------------------
         // 🛠️ CONEXIÓN DE INFRAESTRUCTURA Y DETECCIÓN DE COLECCIONES
