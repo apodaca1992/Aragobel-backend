@@ -188,7 +188,7 @@ exports.getJornadaActual = catchAsync(async (req, res, next) => {
     const { id_usuario, id_tienda } = req.query;
 
     // Ejecutamos la lógica secuencial que busca en la base de datos (Paso 1 y Paso 2)
-    const estatusAsistencia = await asistenciaService.getEstatusEnTienda(id_usuario, id_tienda);
+    const estatusAsistencia = await asistenciaService.getEstatusEnTienda(id_usuario, id_tienda, req.user.id_empresa);
 
     return res.status(200).json({
         status: 'success',
