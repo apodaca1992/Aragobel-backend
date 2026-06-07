@@ -52,14 +52,6 @@ const usuarioSchema = Joi.object({
             'any.required': 'El usuario_search es un campo requerido',
             'string.max': 'El usuario_search no puede exceder los 100 caracteres'
         }),
-    email: Joi.string()
-        .max(100)
-        .email() // <--- Valida formato: user@dominio.com
-        .lowercase() // <--- Normaliza a minúsculas automáticamente
-        .messages({
-            'string.email': 'El formato del correo electrónico no es válido',
-            'string.max': 'El email no puede exceder los 100 caracteres'
-        }),
     contrasena: Joi.string()
         .max(100)
         .required()
